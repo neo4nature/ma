@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MA — Rejestracja</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .wrap{max-width:520px;margin:56px auto;padding:0 16px}
+    .card{background:rgba(10,12,20,.55);border:1px solid #222;border-radius:12px;padding:16px}
+    input{width:100%;padding:10px;border-radius:10px;border:1px solid #222;background:#0b0f18;color:#e9eefb}
+    label{display:block;margin:10px 0 6px}
+    button{margin-top:12px;padding:10px 14px;border-radius:10px;border:1px solid #222;background:#0f1a2b;color:#e9eefb;cursor:pointer;width:100%}
+    .muted{opacity:.75}
+    .flash{margin-top:10px;color:#ffb3b3}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h2 style="margin:0 0 6px">Utwórz użytkownika</h2>
+      <div class="muted">Po utworzeniu: generujemy klucze (wallet/comm/horyzont) i dajemy <b>1000</b> na start do testów.</div>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div class="flash">{{ messages[0] }}</div>
+        {% endif %}
+      {% endwith %}
+
+      <form method="POST" style="margin-top:12px">
+        <label>Nazwa użytkownika</label>
+        <input name="username" placeholder="np. Natalia" required maxlength="32">
+        <label>Hasło</label>
+        <input name="password" type="password" placeholder="min. 3 znaki" required minlength="3">
+        <button type="submit">Utwórz i zaloguj</button>
+      </form>
+
+      <div class="muted" style="margin-top:12px">
+        Masz już konto? <a href="{{ url_for('auth.login_route') }}">Zaloguj</a>.
+        <div style="margin-top:8px"><a href="{{ url_for('system_routes.home') }}">← Powrót</a></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

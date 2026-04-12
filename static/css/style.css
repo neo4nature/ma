@@ -1,0 +1,321 @@
+/* =========================
+   RESET & PODSTAWY
+   ========================= */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+/* =========================
+   ZMIENNE KOLORY – MOTYWY
+   ========================= */
+
+/* Domyślny motyw – "standard" */
+:root {
+  --bg-gradient-top: #1b1b2f;
+  --bg-gradient-mid: #050509;
+  --bg-gradient-bottom: #000000;
+
+  --tile-bg: rgba(10, 10, 20, 0.85);
+  --tile-border: rgba(255, 255, 255, 0.06);
+  --tile-shadow: 0 18px 40px rgba(0, 0, 0, 0.65);
+
+  --text-main: #f2f2ff;
+  --text-muted: rgba(240, 240, 255, 0.75);
+
+  /* Kolory modułów – STANDARD */
+  --wallet-shadow: rgba(140, 100, 255, 0.45);
+  --wallet-border: rgba(180, 140, 255, 0.7);
+
+  --market-shadow: rgba(70, 210, 150, 0.4);
+  --market-border: rgba(100, 240, 170, 0.75);
+
+  --comm-shadow: rgba(80, 170, 255, 0.45);
+  --comm-border: rgba(130, 200, 255, 0.8);
+
+  --feed-shadow: rgba(160, 120, 70, 0.5);
+  --feed-border: rgba(200, 160, 100, 0.85);
+
+  --accent-standard: #a78bfa;
+}
+
+/* MOTYW "mlody" – jaśniejsze, bardziej intensywne kolory */
+body[data-theme="mlody"] {
+  --bg-gradient-top: #181835;
+  --bg-gradient-mid: #050515;
+  --bg-gradient-bottom: #000000;
+
+  --tile-bg: rgba(12, 12, 30, 0.9);
+  --tile-border: rgba(255, 255, 255, 0.09);
+  --tile-shadow: 0 20px 45px rgba(0, 0, 0, 0.8);
+
+  --text-main: #ffffff;
+  --text-muted: rgba(240, 240, 255, 0.85);
+
+  --wallet-shadow: rgba(170, 120, 255, 0.7);
+  --wallet-border: rgba(210, 170, 255, 0.95);
+
+  --market-shadow: rgba(90, 235, 170, 0.7);
+  --market-border: rgba(140, 255, 200, 0.95);
+
+  --comm-shadow: rgba(100, 190, 255, 0.75);
+  --comm-border: rgba(160, 220, 255, 1);
+
+  --feed-shadow: rgba(190, 140, 80, 0.8);
+  --feed-border: rgba(230, 180, 120, 1);
+
+  --accent-standard: #c4b5fd;
+}
+
+/* PROSTE MOTYWY UI – spójne z Feed (dark/light) */
+body[data-theme="dark"] {
+  /* dark == domyślny :root, więc tu tylko zostawiamy hak na przyszłość */
+}
+
+body[data-theme="light"] {
+  --bg-gradient-top: #f2f2ff;
+  --bg-gradient-mid: #e8e8f7;
+  --bg-gradient-bottom: #dfe3ff;
+
+  --tile-bg: rgba(255, 255, 255, 0.86);
+  --tile-border: rgba(0, 0, 0, 0.08);
+  --tile-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+
+  --text-main: #101018;
+  --text-muted: rgba(0, 0, 0, 0.65);
+
+  --wallet-shadow: rgba(120, 90, 220, 0.22);
+  --wallet-border: rgba(120, 90, 220, 0.55);
+
+  --market-shadow: rgba(70, 210, 150, 0.18);
+  --market-border: rgba(70, 210, 150, 0.45);
+
+  --comm-shadow: rgba(80, 170, 255, 0.2);
+  --comm-border: rgba(80, 170, 255, 0.55);
+
+  --feed-shadow: rgba(160, 120, 70, 0.18);
+  --feed-border: rgba(160, 120, 70, 0.55);
+}
+
+/* Palety – minimalnie: sterujemy akcentem */
+body[data-palette="neo"] { --accent-standard: #a78bfa; }
+body[data-palette="forest"] { --accent-standard: #43d19a; }
+body[data-palette="amber"] { --accent-standard: #ffb84d; }
+body[data-palette="brown"] { --accent-standard: #c98a5a; }
+
+/* MOTYW "senior" – spokojniejsze, cieplejsze, wyższy kontrast */
+body[data-theme="senior"] {
+  --bg-gradient-top: #16161f;
+  --bg-gradient-mid: #050509;
+  --bg-gradient-bottom: #000000;
+
+  --tile-bg: rgba(8, 8, 16, 0.95);
+  --tile-border: rgba(255, 255, 255, 0.18);
+  --tile-shadow: 0 18px 38px rgba(0, 0, 0, 0.7);
+
+  --text-main: #f8f5ff;
+  --text-muted: rgba(245, 240, 255, 0.9);
+
+  --wallet-shadow: rgba(120, 90, 220, 0.55);
+  --wallet-border: rgba(190, 160, 255, 0.9);
+
+  --market-shadow: rgba(70, 180, 130, 0.55);
+  --market-border: rgba(130, 220, 170, 0.9);
+
+  --comm-shadow: rgba(70, 140, 220, 0.6);
+  --comm-border: rgba(130, 190, 240, 0.95);
+
+  --feed-shadow: rgba(140, 105, 60, 0.7);
+  --feed-border: rgba(210, 170, 110, 0.95);
+
+  --accent-standard: #c4b5fd;
+}
+
+/* =========================
+   BODY & TŁO
+   ========================= */
+
+/* NOTE: body was centered with flex which broke scrolling on long pages.
+   We keep the same background but allow natural document flow + scrolling. */
+body {
+  min-height: 100vh;
+  display: block;
+  padding: 24px 0 40px;
+  overflow-y: auto;
+  background: radial-gradient(
+    circle at top,
+    var(--bg-gradient-top) 0%,
+    var(--bg-gradient-mid) 50%,
+    var(--bg-gradient-bottom) 100%
+  );
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text-main);
+}
+
+/* =========================
+   STRUKTURA GŁÓWNA
+   ========================= */
+
+.ma-root {
+  width: 90vw;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Górny pasek z nazwą i przełącznikiem motywów */
+.ma-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.6rem;
+}
+
+.ma-brand {
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.ma-theme-switcher {
+  display: inline-flex;
+  gap: 0.4rem;
+  padding: 0.3rem;
+  border-radius: 999px;
+  background: rgba(10, 10, 25, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.ma-theme-button {
+  border: none;
+  font-size: 0.7rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 150ms ease-out, color 150ms ease-out, transform 120ms ease-out;
+}
+
+.ma-theme-button[data-active="true"] {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent-standard);
+  transform: translateY(-1px);
+}
+
+/* =========================
+   GRID 4 MODUŁÓW
+   ========================= */
+
+.ma-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, 1fr);
+  gap: 1.8rem;
+}
+
+/* Wyłączamy domyślne stylowanie linków */
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Kafelki – wspólny styl */
+.tile {
+  border-radius: 28px;
+  padding: 1.8rem;
+  background: var(--tile-bg);
+  border: 1px solid var(--tile-border);
+  box-shadow:
+    var(--tile-shadow),
+    0 0 0 1px rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(18px);
+  transition:
+    transform 180ms ease-out,
+    box-shadow 180ms ease-out,
+    border-color 180ms ease-out,
+    background 180ms ease-out;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.tile h2 {
+  font-size: 1.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.tile p {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+/* Indywidualne kolory modułów – używają zmiennych z motywu */
+
+.tile-wallet {
+    box-shadow: 0 18px 40px var(--feed-shadow);
+  border-color: var(--feed-border);
+}
+
+.tile-market {
+  box-shadow: 0 18px 40px var(--market-shadow);
+  border-color: var(--market-border);
+}
+
+.tile-comm {
+  box-shadow: 0 18px 40px var(--comm-shadow);
+  border-color: var(--comm-border);
+}
+
+.tile-feed {
+  box-shadow: 0 18px 40px var(--wallet-shadow);
+  border-color: var(--wallet-border);
+}
+
+/* Hover – delikatny "oddech" */
+
+.tile:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 24px 50px rgba(0, 0, 0, 0.75),
+    0 0 18px rgba(255, 255, 255, 0.08);
+}
+
+/* Mobile */
+
+@media (max-width: 768px) {
+  .ma-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  .ma-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+}
+
+
+/* v0.12: distinguish money events in comm threads */
+.msg.money{border-left:3px solid #6cf;}
+
+/* Link-like small action buttons */
+.linklike{
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: underline;
+  font: inherit;
+}

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MA — Logowanie</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .wrap{max-width:520px;margin:56px auto;padding:0 16px}
+    .card{background:rgba(10,12,20,.55);border:1px solid #222;border-radius:12px;padding:16px}
+    input{width:100%;padding:10px;border-radius:10px;border:1px solid #222;background:#0b0f18;color:#e9eefb}
+    label{display:block;margin:10px 0 6px}
+    button{margin-top:12px;padding:10px 14px;border-radius:10px;border:1px solid #222;background:#0f1a2b;color:#e9eefb;cursor:pointer;width:100%}
+    .muted{opacity:.75}
+    .flash{margin-top:10px;color:#ffb3b3}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h2 style="margin:0 0 6px">Logowanie</h2>
+      <div class="muted">Domyślni użytkownicy lokalni: <b>Neo</b> i <b>Lira</b> (hasło: <b>demo</b>).</div>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div class="flash">{{ messages[0] }}</div>
+        {% endif %}
+      {% endwith %}
+
+      <form method="POST" style="margin-top:12px">
+        <label>Nazwa użytkownika</label>
+        <input name="username" placeholder="np. Neo" required>
+        <label>Hasło</label>
+        <input name="password" type="password" placeholder="•••" required>
+        <button type="submit">Zaloguj</button>
+      </form>
+
+      <hr style="border:0;border-top:1px solid #222;margin:18px 0">
+
+      <h3 style="margin:0 0 6px;font-size:16px">Logowanie portfelem (podpis)</h3>
+      <div class="muted" style="margin-bottom:10px">Prototyp: serwer prosi walletd o podpis challenge (purpose: <b>FID_LOGIN</b>).</div>
+
+      <label>Nazwa użytkownika</label>
+      <input id="walletUser" placeholder="np. Neo">
+      <button id="walletBtn" type="button">Zaloguj portfelem</button>
+      <div id="walletMsg" class="flash" style="display:none"></div>
+
+      <script>
+        const btn = document.getElementById('walletBtn');
+        const msg = document.getElementById('walletMsg');
+        btn.addEventListener('click', async () => {
+          msg.style.display = 'none';
+          const username = (document.getElementById('walletUser').value || '').trim();
+          if (!username) {
+            msg.textContent = 'Podaj nazwę użytkownika.';
+            msg.style.display = 'block';
+            return;
+          }
+          btn.disabled = true;
+          btn.textContent = 'Podpisuję…';
+          try {
+            const r = await fetch('/fid/login_wallet', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({username})
+            });
+            const j = await r.json();
+            if (!j.ok) {
+              msg.textContent = 'Błąd: ' + (j.error || 'unknown');
+              msg.style.display = 'block';
+            } else {
+              window.location.href = '/comm';
+              return;
+            }
+          } catch (e) {
+            msg.textContent = 'Błąd połączenia.';
+            msg.style.display = 'block';
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Zaloguj portfelem';
+          }
+        });
+      </script>
+
+      <div class="muted" style="margin-top:12px">
+        Nie masz konta? <a href="{{ url_for('auth.register_route') }}">Utwórz</a>.
+        <div style="margin-top:8px"><a href="{{ url_for('system_routes.home') }}">← Powrót</a></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

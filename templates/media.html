@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>MA – Media (manifesty)</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div style="max-width:980px;margin:18px auto 0;padding:0 16px;opacity:.92;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+    <div>
+      <a href="{{ url_for('system_routes.home') }}" style="text-decoration:none;">← Home</a>
+      <span style="opacity:.6"> • </span>
+      <a href="{{ url_for('feed.feed_route') }}" style="text-decoration:none;">Feed</a>
+      <span style="opacity:.6"> • </span>
+      <a href="{{ url_for('feed.timeline_route') }}" style="text-decoration:none;">Timeline</a>
+    </div>
+    <div>
+      {% if me %}
+        Zalogowany jako <b>{{ me }}</b> • <a href="{{ url_for('auth.logout_route') }}">Wyloguj</a>
+      {% else %}
+        Niezalogowany • <a href="{{ url_for('auth.login_route') }}">Logowanie</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="max-width:980px;margin:16px auto 0;padding:0 16px;">
+    <h1 style="margin:10px 0;">Media – manifesty (v0)</h1>
+    <p style="opacity:.85;margin-top:0;">
+      To jest tylko warstwa <b>manifestów</b>: lista chunków (CID/hash), metadane i podpis portfelem.
+      Sam hosting/swarm dołożymy później.
+    </p>
+
+    {% if me %}
+      <div style="margin:14px 0;">
+        <a class="btn" href="{{ url_for('system_routes.media_new') }}">+ Dodaj manifest (podpis)</a>
+      </div>
+    {% endif %}
+
+    <div style="margin-top:14px;">
+      {% if not items %}
+        <p style="opacity:.75;">Brak manifestów.</p>
+      {% endif %}
+
+      {% for it in items %}
+        <div class="card" style="margin:12px 0;padding:12px 14px;">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+            <div>
+              <div style="font-size:18px;font-weight:600;">
+                {{ it.manifest.title }}
+                {% if it.verified %}
+                  <span style="font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.25);margin-left:6px;">✓ verified</span>
+                {% endif %}
+              </div>
+              <div style="opacity:.8;margin-top:4px;">Autor: <b>{{ it.author }}</b> • {{ it.manifest.mime }} • {{ it.minutes_ago }} min temu</div>
+            </div>
+            <div style="text-align:right;opacity:.85;">
+              <div style="font-size:12px;">{{ it.id }}</div>
+              <div style="font-size:12px;opacity:.8;">chunks: {{ (it.manifest.chunks|length) }}</div>
+            </div>
+          </div>
+
+          {% if it.manifest.description %}
+            <div style="margin-top:10px;white-space:pre-wrap;opacity:.92;">{{ it.manifest.description }}</div>
+          {% endif %}
+
+          <details style="margin-top:10px;">
+            <summary style="cursor:pointer;opacity:.85;">Szczegóły (hash/podpis/chunki)</summary>
+            <div style="margin-top:10px;font-family:monospace;font-size:12px;opacity:.92;">
+              <div><b>manifest_hash_b64</b>: {{ it.manifest_hash_b64 }}</div>
+              <div><b>signature_b64</b>: {{ it.signature_b64 }}</div>
+              <div style="margin-top:8px;"><b>chunks</b>:</div>
+              <ul>
+                {% for c in it.manifest.chunks %}
+                  <li style="word-break:break-all;">{{ c }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+          </details>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</body>
+</html>

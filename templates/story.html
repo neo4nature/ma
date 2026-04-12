@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MA — Opowieść i API</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .wrap{max-width:980px;margin:28px auto;padding:0 16px}
+    .card{background:rgba(10,12,20,.55);border:1px solid #222;border-radius:14px;padding:16px}
+    h1,h2{margin:0 0 10px}
+    p{opacity:.9;line-height:1.55}
+    code{background:rgba(20,26,40,.7);padding:2px 6px;border-radius:8px;border:1px solid #222}
+    pre{background:rgba(20,26,40,.6);padding:12px;border-radius:12px;border:1px solid #222;overflow:auto}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    @media (max-width:900px){.grid{grid-template-columns:1fr}}
+    .muted{opacity:.75}
+    a{color:var(--accent-standard);text-decoration:none}
+    ul{margin:10px 0 0 18px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>MA — gdzie jesteśmy i po co to robimy</h1>
+      <p class="muted">Krótka opowieść dla ludzi + mini-dokumentacja API (lokalnie).</p>
+    </div>
+
+    <div class="grid" style="margin-top:16px;">
+      <div class="card">
+        <h2>Idea</h2>
+        <p>
+          Budujemy <b>MA</b>: lokalny, bezpieczny prototyp ekosystemu, w którym <b>portfel</b>, <b>komunikator</b>
+          i <b>Horyzont</b> (warstwa decyzyjna) działają razem. Zamiast jednego "magicznego" systemu, mamy
+          pięć małych modułów oceny ryzyka (Logika, Bezpieczeństwo, Ekonomia, Optymalizacja, Spójność),
+          a dopiero potem wspólny werdykt.
+        </p>
+        <p>
+          To ma być fundament pod docelowy hardware-wallet: host pyta urządzenie o tożsamość, przesyła transakcję,
+          a urządzenie podpisuje ją i zwraca potwierdzenie.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Co już działa (v0.8)</h2>
+        <ul>
+          <li><b>Użytkownicy</b> — tworzenie lokalnych tożsamości + startowy balans (1000 LifeCoin).</li>
+          <li><b>Portfel</b> — transakcje oceniane przez 5 mini-AI + podpis TX (secp256k1).</li>
+          <li><b>Horyzont Receipt</b> — podpis Ed25519 dla hash-a transakcji (dowód decyzji).</li>
+          <li><b>Rundy Horyzontu</b> — grupowanie zdarzeń w rundy i podpis rundy (hash + prev_hash).</li>
+          <li><b>Komunikator E2E</b> — szyfrowanie wiadomości per para użytkowników, wątkowanie.</li>
+          <li><b>Transport</b> — tryb software + tryb "firmware" przez daemon <code>walletd</code> (PTY/serial),
+              z CRC32 i ochroną przed replay.</li>
+          <li><b>Tożsamość urządzenia</b> — odczyt fingerprintu + weryfikacja podpisu urządzenia.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>Jak to opowiedzieć w jednym zdaniu</h2>
+      <p>
+        MA to prototyp "inteligentnego" portfela: każda akcja przechodzi przez 5 niezależnych strażników,
+        Horyzont podejmuje decyzję i zostawia podpisany ślad — a komunikacja między użytkownikami jest domyślnie szyfrowana.
+      </p>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>API (lokalne)</h2>
+      <p class="muted">Przydatne do integracji frontu, testów i automatyzacji. Wszystko działa lokalnie w Flask.</p>
+      <pre>
+GET  /api/status
+GET  /api/device
+GET  /api/users
+GET  /api/wallet
+GET  /api/rounds
+      </pre>
+      <p>
+        Wersja demo jest celowo prosta: to jest "rdzeń", który potem rozbudujemy o reputację, role i sieć.
+      </p>
+      <p>
+        <a href="{{ url_for('system_routes.home') }}">← Powrót do MA</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>

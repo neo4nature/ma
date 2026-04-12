@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>MA – Timeline</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .tl-wrap{max-width:980px;margin:18px auto;padding:0 16px;}
+    .tl-card{background:#0f1115;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 14px;margin:10px 0;}
+    .tl-row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+    .muted{opacity:.75;font-size:.92em}
+    .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.08);font-size:.85em;margin-right:6px}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+  </style>
+</head>
+<body>
+  <div class="tl-wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div>
+        {% if me %}
+          Zalogowany jako <b>{{ me }}</b>
+        {% endif %}
+        <div class="muted">Jedna oś czasu: rundy Horyzontu • transakcje • zdarzenia komunikatora</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="{{ url_for('feed.feed_route') }}">Feed</a>
+        <a href="{{ url_for('market_storage.market') }}">Market</a>
+        <a href="/comm">Comm</a>
+        <a href="{{ url_for('account_routes.account_route') }}">Wallet</a>
+        <a href="{{ url_for('account_routes.account_route') }}">Account</a>
+        <a href="{{ url_for('system_routes.story') }}">Story</a>
+      </div>
+    </div>
+
+    <div style="margin:14px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <label class="muted" for="limit">Limit:</label>
+      <select id="limit">
+        <option value="50">50</option>
+        <option value="200" selected>200</option>
+        <option value="500">500</option>
+      </select>
+      <button id="refresh" type="button">Odśwież</button>
+      <span id="status" class="muted"></span>
+    </div>
+
+    <div class="tl-card" style="margin-top:0;">
+      <div class="tl-row">
+        <div>
+          <span class="tag">PROOF</span>
+          <span class="muted">Eksport/Import dowodu z łańcucha zdarzeń (portable verify)</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">
+        <label class="muted" for="proofSeq">seq:</label>
+        <input id="proofSeq" value="1" style="width:110px;padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.2);color:inherit;">
+        <a id="proofDownload" href="#" class="mono">download</a>
+        <button id="proofBuild" type="button">Pokaż JSON</button>
+      </div>
+      <div style="margin-top:10px;display:grid;grid-template-columns:1fr 220px;gap:10px;align-items:start;">
+        <textarea id="proofBox" rows="6" placeholder="wklej proof JSON tutaj" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.2);color:inherit;"></textarea>
+        <div>
+          <button id="proofVerify" type="button" style="width:100%;">Verify proof</button>
+          <div id="proofResult" class="muted" style="margin-top:10px;word-break:break-word;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="timeline"></div>
+  </div>
+
+<script>
+function fmtTs(ts){
+  try{
+    const d = new Date(ts*1000);
+    return d.toLocaleString();
+  }catch(e){
+    return String(ts);
+  }
+}
+
+function esc(s){
+  return (s ?? "").toString()
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#39;");
+}
+
+function proofSeq(){
+  const v = document.getElementById('proofSeq').value;
+  const n = parseInt(v, 10);
+  return isNaN(n) ? 1 : Math.max(1, n);
+}
+
+function updateProofLinks(){
+  const seq = proofSeq();
+  document.getElementById('proofDownload').href = `/api/event_chain/proof/${seq}/download`;
+}
+
+function renderEvent(e){
+  const when = fmtTs(e.ts);
+  if(e.type === "tx"){
+    const tag = e.allowed ? "TX • SIGNED" : "TX • BLOCKED";
+    const amt = (e.amount ?? 0);
+    const desc = e.description ? ` — <span class="muted">${esc(e.description)}</span>` : "";
+    return `
+      <div class="tl-card">
+        <div class="tl-row">
+          <div>
+            <span class="tag">${tag}</span>
+            <span class="mono">${esc(e.sender)} → ${esc(e.receiver)}</span>
+            <span class="mono"> • ${esc(amt)}</span>${desc}
+          </div>
+          <div class="muted">${esc(when)}</div>
+        </div>
+        <div class="muted mono">id: ${esc(e.id || "")}</div>
+      </div>`;
+  }
+  if(e.type === "msg"){
+    const dir = e.direction === "out" ? "MSG • OUT" : "MSG • IN";
+    const read = e.is_read ? "read" : "unread";
+    return `
+      <div class="tl-card">
+        <div class="tl-row">
+          <div>
+            <span class="tag">${dir}</span>
+            <span class="mono">peer: ${esc(e.peer)}</span>
+            <span class="muted"> • ${read}</span>
+          </div>
+          <div class="muted">${esc(when)}</div>
+        </div>
+        <div class="muted mono">msg_id: ${esc(e.msg_id || "")}</div>
+      </div>`;
+  }
+  if(e.type === "round"){
+    return `
+      <div class="tl-card">
+        <div class="tl-row">
+          <div>
+            <span class="tag">HORIZON • ROUND</span>
+            <span class="mono">round_id: ${esc(e.round_id)}</span>
+            <span class="muted"> • events: ${esc(e.events_count)}</span>
+          </div>
+          <div class="muted">${esc(when)}</div>
+        </div>
+        <div class="muted mono">round_hash: ${esc(e.round_hash || "")}</div>
+      </div>`;
+  }
+  if(e.type === "feed_post"){
+    return `
+      <div class="tl-card">
+        <div class="tl-row">
+          <div>
+            <span class="tag">FEED • POST</span>
+            <span class="mono">${esc(e.author)} • ${esc(e.community)}</span>
+          </div>
+          <div class="muted">${esc(when)}</div>
+        </div>
+        <div class="muted mono">post_id: ${esc(e.post_id || "")}</div>
+        <div class="muted mono">manifest: ${esc(e.manifest_hash_b64 || "")}</div>
+      </div>`;
+  }
+  return `
+    <div class="tl-card">
+      <div class="tl-row">
+        <div><span class="tag">EVENT</span> <span class="mono">${esc(e.type)}</span></div>
+        <div class="muted">${esc(when)}</div>
+      </div>
+    </div>`;
+}
+
+async function loadTimeline(){
+  const status = document.getElementById("status");
+  const limit = document.getElementById("limit").value;
+  status.textContent = "Ładowanie…";
+  try{
+    const r = await fetch(`/api/timeline?limit=${encodeURIComponent(limit)}`, {credentials:"same-origin"});
+    const j = await r.json();
+    const tl = document.getElementById("timeline");
+    tl.innerHTML = (j.events || []).map(renderEvent).join("");
+    const ch = j.chain || {};
+    const chTxt = (ch && (ch.ok === false)) ? ` • chain: BAD` : ` • chain: OK`;
+    status.textContent = `OK • events: ${(j.events||[]).length}${chTxt}`;
+  }catch(e){
+    status.textContent = "Błąd ładowania timeline";
+  }
+}
+
+function updateProofLinks(){
+  const seq = parseInt(document.getElementById("proofSeq").value || "1", 10) || 1;
+  document.getElementById("proofDownload").href = `/api/event_chain/proof/${seq}/download`;
+}
+
+document.getElementById("proofSeq").addEventListener("input", updateProofLinks);
+updateProofLinks();
+
+document.getElementById("proofBuild").addEventListener("click", async () => {
+  const seq = parseInt(document.getElementById("proofSeq").value || "1", 10) || 1;
+  const box = document.getElementById("proofBox");
+  const resEl = document.getElementById("proofResult");
+  resEl.textContent = "";
+  try{
+    const r = await fetch(`/api/event_chain/proof/${seq}`, {credentials:"same-origin"});
+    const j = await r.json();
+    box.value = JSON.stringify(j, null, 2);
+  }catch(e){
+    resEl.textContent = "Nie udało się pobrać proof JSON.";
+  }
+});
+
+document.getElementById("proofVerify").addEventListener("click", async () => {
+  const box = document.getElementById("proofBox");
+  const resEl = document.getElementById("proofResult");
+  resEl.textContent = "Verifying…";
+  let payload = null;
+  try{
+    payload = JSON.parse(box.value || "{}");
+  }catch(e){
+    resEl.textContent = "Błędny JSON.";
+    return;
+  }
+  try{
+    const r = await fetch(`/api/event_chain/proof/verify`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      credentials:"same-origin",
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    resEl.textContent = j.ok ? `OK • checked: ${j.checked} • ${j.from_seq}→${j.to_seq}` : `BAD • ${j.reason || ""}`;
+  }catch(e){
+    resEl.textContent = "Błąd weryfikacji.";
+  }
+});
+
+document.getElementById("refresh").addEventListener("click", loadTimeline);
+loadTimeline();
+</script>
+</body>
+</html>

@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>Portfel MA – Horyzont</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .wallet-wrapper {
+      max-width: 980px;
+      margin: 2.5rem auto;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text-main);
+    }
+    .wallet-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr);
+      gap: 1.6rem;
+    }
+    @media (max-width: 900px) {
+      .wallet-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .wallet-card {
+      border-radius: 24px;
+      padding: 1.6rem 1.8rem;
+      background: rgba(10,10,20,0.95);
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 22px 44px rgba(0,0,0,0.85);
+      backdrop-filter: blur(18px);
+    }
+    .wallet-card h1,
+    .wallet-card h2 {
+      margin-bottom: 0.5rem;
+    }
+    .wallet-card p {
+      font-size: 0.9rem;
+      opacity: 0.85;
+    }
+    .wallet-form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      margin-top: 0.8rem;
+    }
+    .wallet-label {
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+    .wallet-input {
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(5,5,15,0.9);
+      padding: 0.55rem 0.9rem;
+      font-size: 0.9rem;
+      color: var(--text-main);
+      outline: none;
+    }
+    .wallet-input:focus {
+      border-color: var(--accent-standard);
+      box-shadow: 0 0 0 1px var(--accent-standard);
+    }
+    .wallet-textarea {
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(5,5,15,0.9);
+      padding: 0.7rem 0.9rem;
+      font-size: 0.9rem;
+      color: var(--text-main);
+      min-height: 70px;
+      outline: none;
+      resize: vertical;
+    }
+    .wallet-textarea:focus {
+      border-color: var(--accent-standard);
+      box-shadow: 0 0 0 1px var(--accent-standard);
+    }
+    .wallet-submit {
+      margin-top: 1.1rem;
+      padding: 0.6rem 1.4rem;
+      border-radius: 999px;
+      border: none;
+      background: var(--accent-standard);
+      color: #111111;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 18px 32px rgba(167,139,250,0.4);
+    }
+    .wallet-submit:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 22px 40px rgba(167,139,250,0.5);
+    }
+    .wallet-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.2rem 0.7rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.18);
+      font-size: 0.8rem;
+      opacity: 0.9;
+      margin-bottom: 0.6rem;
+    }
+    .wallet-ai-list {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.6rem;
+      margin-top: 0.8rem;
+    }
+    .wallet-ai-item {
+      border-radius: 18px;
+      padding: 0.6rem 0.9rem;
+      background: rgba(18,18,30,0.95);
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 0.88rem;
+    }
+    .wallet-ai-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+    }
+    .wallet-ai-name {
+      font-weight: 600;
+    }
+    .wallet-ai-level-ok {
+      color: #7ee787;
+    }
+    .wallet-ai-level-warn {
+      color: #facc15;
+    }
+    .wallet-ai-level-block {
+      color: #f97373;
+    }
+    .wallet-ai-reason {
+      opacity: 0.85;
+    }
+    .wallet-result {
+      margin-top: 0.6rem;
+      font-size: 0.88rem;
+      word-break: break-all;
+    }
+    .wallet-status-ok {
+      color: #7ee787;
+    }
+    .wallet-status-warn {
+      color: #facc15;
+    }
+    .wallet-status-block {
+      color: #f97373;
+    }
+    .wallet-back {
+      margin-top: 1.4rem;
+      font-size: 0.9rem;
+      opacity: 0.85;
+    }
+    .wallet-back a {
+      color: var(--accent-standard);
+      text-decoration: none;
+    }
+    .wallet-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.6rem;
+      font-size: 0.86rem;
+    }
+    .wallet-table th,
+    .wallet-table td {
+      padding: 0.4rem 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      text-align: left;
+    }
+    .wallet-table th {
+      opacity: 0.8;
+      font-weight: 500;
+    }
+    .wallet-pill {
+      border-radius: 999px;
+      padding: 0.15rem 0.6rem;
+      font-size: 0.78rem;
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+    .wallet-pill-ok {
+      color: #7ee787;
+    }
+    .wallet-pill-block {
+      color: #f97373;
+    }
+    .wallet-pill-warn {
+      color: #facc15;
+    }
+  
+    .pill{display:inline-flex; align-items:center; gap:0.35rem; padding:0.25rem 0.55rem; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); font-size:0.85rem;}
+    .muted{opacity:0.8}
+    .btn{border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.06); color:#fff; padding:0.55rem 0.8rem; border-radius:14px; cursor:pointer;}
+    .btn:hover{background:rgba(255,255,255,0.1);}
+    .btn2{background:rgba(0,0,0,0.12);}
+    .btn3{opacity:0.85}
+    .fields{display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:0.8rem; margin-top:0.8rem;}
+    .field{border:1px solid rgba(255,255,255,0.12); border-radius:18px; padding:0.8rem;}
+    .bar{height:10px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; margin-top:0.55rem;}
+    .barFill{height:100%; background:rgba(255,255,255,0.28);}
+    .receipts{display:flex; flex-direction:column; gap:0.6rem;}
+    .receipt{border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:0.6rem 0.7rem;}
+    @media(max-width:900px){.fields{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+  <div class="wallet-wrapper">
+
+    <div class="wallet-grid">
+      <div class="wallet-card">
+        <div class="wallet-badge">Portfel MA · Symulator Horyzontu</div>
+        <h1>Testowa transakcja MA</h1>
+        <p>
+          Wpisz prostą transakcję. Pięć mini-AI oceni ją, a Horyzont zdecyduje,
+          czy może zostać podpisana i zapisze ją w portfelu.
+        </p>
+
+
+        <div class="wallet-card" style="margin-top:16px;">
+          <h2 style="margin:0 0 8px;">Użytkownicy</h2>
+          <div class="wallet-muted">
+            Nowych użytkowników dodajemy przez <a href="{{ url_for('auth.register_route') }}">Rejestrację</a>.
+            Każdy nowy użytkownik dostaje automatycznie klucze (wallet/comm/horyzont) i <b>1000</b> na start.
+          </div>
+          <div class="wallet-muted" style="margin-top:10px;">
+            Dostępni odbiorcy: {% for u in users %}<span style="display:inline-block; padding:4px 10px; border:1px solid #222; border-radius:999px; margin:4px 6px 0 0;">{{u}}</span>{% endfor %}
+          </div>
+        </div>
+
+        <form method="post" class="wallet-form-row">
+          <div class="wallet-form-row">
+            <label class="wallet-label">Nadawca</label>
+            <div class="wallet-input" style="display:flex;align-items:center;gap:10px">
+              <b>{{ me }}</b>
+              <span style="opacity:.7">(sesja)</span>
+            </div>
+
+      <div class="wallet-card">
+        <div class="wallet-badge">Horyzont · Ogień i Pola</div>
+        <h2>Kontrybucja i „zbiór”</h2>
+        <p class="muted">
+          Prototyp UI: suwak (energia) + 4 pola (storage). Nagroda jest potwierdzana podpisem Horyzontu i może być odebrana offline.
+        </p>
+
+        <div style="margin-top:0.8rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:0.6rem;">
+            <div style="font-weight:700;">Suwak energii</div>
+            <div class="pill"><span id="sliderVal">{{ contrib.slider_pos }}</span>%</div>
+          </div>
+          <div class="muted" style="margin:0.25rem 0 0.5rem;">0% = piec (Horyzont) · 100% = kopalnia (nadwyżka)</div>
+          <input id="energySlider" type="range" min="0" max="100" value="{{ contrib.slider_pos }}" style="width:100%;">
+          <div style="display:flex; gap:0.5rem; margin-top:0.6rem; flex-wrap:wrap;">
+            <button class="btn" id="saveSliderBtn">Zapisz</button>
+            <span id="sliderMsg" class="muted"></span>
+          </div>
+        </div>
+
+        <hr style="margin:1rem 0; opacity:0.2;">
+
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-weight:700;">Pola (1 pole = 1 GB)</div>
+          <div class="muted">Etapy wzrostu: 0–7</div>
+        </div>
+
+        <div class="fields">
+          {% for f in storage_fields %}
+          <div class="field">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="font-weight:700;">Pole {{ f.field_id }}</div>
+              <div class="pill">Stage {{ f.stage }}/7</div>
+            </div>
+            <div class="muted" style="margin-top:0.25rem;">
+              Status: <b>{{ f.status }}</b> · Dni: {{ f.days_elapsed }} · Zobowiązanie: {{ f.days_committed }}d
+            </div>
+
+            <div class="bar">
+              <div class="barFill" style="width: {{ (f.stage/7*100) | round(0) }}%;"></div>
+            </div>
+
+            <div style="display:flex; gap:0.5rem; margin-top:0.6rem; flex-wrap:wrap;">
+              <button class="btn btn2" onclick="startField({{ f.field_id }})">Zasadź (7 dni)</button>
+              <button class="btn" onclick="harvestField({{ f.field_id }})">Zbierz</button>
+              <button class="btn btn3" onclick="resetField({{ f.field_id }})">Wyczyść</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <hr style="margin:1rem 0; opacity:0.2;">
+
+        <div style="font-weight:700; margin-bottom:0.4rem;">Ostatnie paragony Horyzontu</div>
+        <div class="muted" style="margin-bottom:0.6rem;">W testach: storage-harvest zapisuje paragon i czyści pole.</div>
+
+        <div class="receipts">
+          {% if receipts and receipts|length > 0 %}
+            {% for r in receipts %}
+            <div class="receipt">
+              <div style="display:flex; justify-content:space-between; gap:0.6rem; align-items:center;">
+                <div><b>{{ r.kind }}</b> · {{ r.receipt_id[:8] }}</div>
+                <div class="muted">{{ (r.issued_ts)|int }}</div>
+              </div>
+              <div class="muted" style="margin-top:0.25rem; word-break:break-all;">
+                hash: {{ r.receipt_hash }}
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="muted">Brak paragonów jeszcze.</div>
+          {% endif %}
+        </div>
+      </div>
+            <input type="hidden" name="sender" value="{{ me }}">
+          </div>
+
+          <div class="wallet-form-row">
+            <label class="wallet-label" for="receiver">Odbiorca</label>
+            <select class="wallet-input" id="receiver" name="receiver">{% for u in users %}<option value="{{u}}">{{u}}</option>{% endfor %}</select>
+          </div>
+
+          <div class="wallet-form-row">
+            <label class="wallet-label" for="amount">Kwota (LifeCoin)</label>
+            <input class="wallet-input" id="amount" name="amount" placeholder="np. 13.37">
+          </div>
+
+          <div class="wallet-form-row">
+            <label class="wallet-label" for="description">Opis / intencja</label>
+            <textarea class="wallet-textarea" id="description" name="description"
+              placeholder="np. testowa wymiana w MA"></textarea>
+          </div>
+
+          <button type="submit" class="wallet-submit">Przepuść przez Horyzont</button>
+        </form>
+
+        <div class="wallet-back">
+          <a href="{{ url_for('system_routes.home') }}">← Powrót do MA</a>
+        </div>
+      </div>
+
+      <div class="wallet-card">
+        <div class="wallet-badge">Tryb podpisu: {{ signer_mode }}{% if device_identity and device_identity.ok %} · Urządzenie: {{ device_identity.fingerprint }}{% endif %}</div>
+
+        {% if signer_mode == 'FIRMWARE' %}
+          <h2 style="margin-top:0">Tożsamość urządzenia</h2>
+          {% if device_identity and device_identity.ok %}
+            <p class="muted" style="margin-top:6px;">
+              Zweryfikowano podpis urządzenia (Ed25519). Transport: <b>{{ device_identity.transport }}</b>.
+            </p>
+            <div class="wallet-ai-item" style="margin-top:10px;">
+              <div class="wallet-ai-header"><span class="wallet-ai-name">Fingerprint</span><span class="wallet-ai-level-ok">OK</span></div>
+              <div class="wallet-ai-reason"><b>{{ device_identity.fingerprint }}</b></div>
+            </div>
+          {% else %}
+            <p class="muted" style="margin-top:6px;">Nie udało się odczytać/zweryfikować tożsamości urządzenia.</p>
+          {% endif %}
+
+          <hr style="border:0;border-top:1px solid rgba(255,255,255,0.08);margin:14px 0">
+        {% endif %}
+
+        <h2 style="margin-top:0">Rundy Horyzontu</h2>
+        <p class="muted">Każda podpisana transakcja jest zdarzeniem. Po 5 zdarzeniach Horyzont zamyka rundę i podpisuje jej hash.</p>
+        {% if round_state and round_state.current %}
+          <div class="wallet-ai-item" style="margin-top:10px;">
+            <div class="wallet-ai-header"><span class="wallet-ai-name">Bieżąca runda</span><span class="wallet-ai-level-warn">W TOKU</span></div>
+            <div class="wallet-ai-reason">Zdarzenia: {{ (round_state.current.events or [])|length }} / 5</div>
+          </div>
+        {% else %}
+          <div class="wallet-ai-item" style="margin-top:10px;">
+            <div class="wallet-ai-header"><span class="wallet-ai-name">Bieżąca runda</span><span class="wallet-ai-level-ok">PUSTA</span></div>
+            <div class="wallet-ai-reason">Brak zdarzeń w buforze.</div>
+          </div>
+        {% endif %}
+        {% if recent_rounds and recent_rounds|length > 0 %}
+          <div class="wallet-ai-item" style="margin-top:10px;">
+            <div class="wallet-ai-header"><span class="wallet-ai-name">Ostatnie zamknięte rundy</span><span class="wallet-ai-level-ok">OK</span></div>
+            <div class="wallet-ai-reason">
+              {% for r in recent_rounds %}
+                <div style="margin:6px 0;">
+                  <b>#{{ r.round_id }}</b> · hash: {{ r.round_hash[:16] }}… · ev: {{ (r.events or [])|length }}
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% else %}
+          <p class="muted" style="margin-top:8px;">Brak zamkniętych rund — wykonaj kilka transakcji testowych.</p>
+        {% endif %}
+
+        <hr style="border:0;border-top:1px solid rgba(255,255,255,0.08);margin:14px 0">
+
+        <h2>Werdykt pięciu AI</h2>
+        {% if decision and verdicts %}
+          <p>
+            Horyzont podjął decyzję na podstawie pięciu niezależnych ocen.
+          </p>
+          <div class="wallet-ai-list">
+            {% for key, v in verdicts.items() %}
+              <div class="wallet-ai-item">
+                <div class="wallet-ai-header">
+                  <span class="wallet-ai-name">{{ v.name }}</span>
+                  {% if v.level == "ok" %}
+                    <span class="wallet-ai-level-ok">OK</span>
+                  {% elif v.level == "warn" %}
+                    <span class="wallet-ai-level-warn">OSTRZEŻENIE</span>
+                  {% else %}
+                    <span class="wallet-ai-level-block">BLOKADA</span>
+                  {% endif %}
+                </div>
+                <div class="wallet-ai-reason">{{ v.reason }}</div>
+              </div>
+            {% endfor %}
+          </div>
+
+          <div class="wallet-result">
+              <p>Status transakcji: {{ tx_result.status }}</p>
+              {% if tx_result.tx_sig_b64 %}
+                <p>Podpis TX (ECDSA/secp256k1, b64): {{ tx_result.tx_sig_b64 }}</p>
+              {% endif %}
+              {% if tx_result.horizon_receipt %}
+                <p>Horyzont – hash TX: {{ tx_result.horizon_receipt.tx_hash }}</p>
+                <p>Horyzont – podpis (Ed25519, b64): {{ tx_result.horizon_receipt.horizon_sig_b64 }}</p>
+              {% endif %}
+            </div>
+
+        {% else %}
+          <p>
+            Wypełnij formularz po lewej i wyślij, żeby zobaczyć, jak pięć modułów AI
+            ocenia transakcję w wersji 0.1.
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="wallet-grid" style="margin-top: 1.6rem;">
+      <div class="wallet-card">
+        <h2>Stan portfela (kontrolowany lokalnie)</h2>
+        <p>To są aktualne salda w wersji soft-chain 0.1.</p>
+        <table class="wallet-table">
+          <thead>
+            <tr>
+              <th>Konto</th>
+              <th>Saldo (LifeCoin)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for name, balance in balances %}
+            <tr>
+              <td>{{ name }}</td>
+              <td>{{ "%.4f"|format(balance) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wallet-card">
+        <h2>Ostatnie transakcje</h2>
+        <p>Najświeższe operacje zapisane w portfelu.</p>
+        <table class="wallet-table">
+          <thead>
+            <tr>
+              <th>Od → Do</th>
+              <th>Kwota</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in tx_history %}
+            <tr>
+              <td>{{ e.sender }} → {{ e.receiver }}</td>
+              <td>{{ "%.4f"|format(e.amount) }}</td>
+              <td>
+                {% if e.status == "SIGNED" %}
+                  <span class="wallet-pill wallet-pill-ok">SIGNED</span>
+                {% elif e.status == "BLOCKED" and e.allowed %}
+                  <span class="wallet-pill wallet-pill-warn">WARN</span>
+                {% else %}
+                  <span class="wallet-pill wallet-pill-block">BLOCKED</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  async function api(path, opts={}) {
+    const r = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) {
+      // Bubble up useful server-side diagnostics (prototype-friendly)
+      let msg = j.error || 'API error';
+      if (j.details) {
+        try {
+          const d = (typeof j.details === 'string') ? j.details : JSON.stringify(j.details);
+          msg += ` | details: ${d}`;
+        } catch(e) {}
+      }
+      throw new Error(msg);
+    }
+    return j;
+  }
+
+  // Contrib & Storage actions
+  const slider = document.getElementById('energySlider');
+  const sliderVal = document.getElementById('sliderVal');
+  const sliderMsg = document.getElementById('sliderMsg');
+  if (slider) {
+    slider.addEventListener('input', () => { sliderVal.textContent = slider.value; });
+    document.getElementById('saveSliderBtn')?.addEventListener('click', async () => {
+      sliderMsg.textContent = '...';
+      try{
+        const j = await api('/api/contrib', {method:'POST', body: JSON.stringify({slider_pos: slider.value})});
+        sliderMsg.textContent = 'zapisano';
+        sliderVal.textContent = j.contrib.slider_pos;
+      }catch(e){ sliderMsg.textContent = 'błąd'; }
+      setTimeout(()=>{ sliderMsg.textContent=''; }, 1200);
+    });
+  }
+
+  // Keep node visible in the LIVE pool (best-effort heartbeat)
+  async function poolPing() {
+    try { await api('/api/pool/ping', {method:'POST', body: JSON.stringify({})}); } catch(e) {}
+  }
+
+  // Prototype worker tick: if you share compute, you can process one queued job.
+  let __workerBusy = false;
+  async function workerTick() {
+    if(__workerBusy) return;
+    __workerBusy = true;
+    try { await api('/api/compute/worker/tick', {method:'POST', body: JSON.stringify({})}); } catch(e) {}
+    __workerBusy = false;
+  }
+  if (slider) {
+    // Heartbeat should continue even if you stop sharing compute (storage still needs it).
+    poolPing();
+    setInterval(poolPing, 60_000);
+    // Only tick worker when user actually shares compute.
+    if (Number(slider.value) > 0) {
+      // check queue often, but keep it light
+      setInterval(workerTick, 10_000);
+    }
+  }
+
+  async function refreshFields() {
+    try{
+      const j = await api('/api/storage/fields');
+      // naive refresh: reload the page (prototype)
+      location.reload();
+    }catch(e){}
+  }
+
+  async function startField(field_id) {
+    try{
+      await api('/api/storage/start', {method:'POST', body: JSON.stringify({field_id, days_committed: 7})});
+      await refreshFields();
+    }catch(e){ alert('Start error: ' + (e?.message || e)); }
+  }
+
+  async function resetField(field_id) {
+    try{
+      await api('/api/storage/reset', {method:'POST', body: JSON.stringify({field_id})});
+      await refreshFields();
+    }catch(e){ alert('Reset error: ' + (e?.message || e)); }
+  }
+
+  async function harvestField(field_id) {
+    try{
+      const j = await api('/api/storage/harvest', {method:'POST', body: JSON.stringify({field_id})});
+      alert('Zebrano. Receipt: ' + (j.receipt_id || 'ok'));
+      await refreshFields();
+    }catch(e){ alert('Harvest error: ' + (e?.message || e)); }
+  }
+
+</script>
+</body>
+</html>

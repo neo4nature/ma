@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MA — Bezpieczeństwo</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .wrap{max-width:860px;margin:28px auto;padding:0 16px}
+    .card{background:rgba(10,12,20,.55);border:1px solid #222;border-radius:12px;padding:14px}
+    .muted{opacity:.75}
+    label{display:block;margin:10px 0 6px}
+    textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #222;background:#0b0f18;color:#e9eefb;min-height:120px}
+    button{margin-top:10px;padding:10px 14px;border-radius:10px;border:1px solid #222;background:#0f1a2b;color:#e9eefb;cursor:pointer}
+    .row{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    .ok{color:#79ffa7}
+    .bad{color:#ff7b7b}
+    a{color:#9dbbff}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="margin-bottom:10px">
+      <div>
+        <h2 style="margin:0">Bezpieczeństwo konta</h2>
+        <div class="muted">Recovery key + rotacja klucza (v0.12)</div>
+      </div>
+      <div><a href="/account">← Konto</a></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h3 style="margin:0 0 6px">Recovery public key</h3>
+      <div id="status" class="muted">Status: …</div>
+
+      <label for="recovery">Wklej recovery public key (PEM) — opcjonalnie</label>
+      <textarea id="recovery" spellcheck="false">{{ recovery_pub_pem or "" }}</textarea>
+
+      <div class="row">
+        <button onclick="saveRecovery()">Zapisz recovery</button>
+        <button onclick="clearRecovery()">Usuń recovery</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 6px">Rotacja klucza portfela</h3>
+      <div class="muted">To archiwizuje stary klucz i generuje nowy. Zdarzenie trafia do Event Chain.</div>
+      <button onclick="rotateKey()">Wykonaj rotację</button>
+      <pre id="rotateOut" style="white-space:pre-wrap;margin-top:10px"></pre>
+    </div>
+  </div>
+
+<script>
+async function refreshStatus(){
+  const r = await fetch('/api/account/recovery');
+  const j = await r.json();
+  const el = document.getElementById('status');
+  if(j.ok){
+    el.innerHTML = 'Status: ' + (j.recovery_pub_pem ? '<span class="ok">ustawiony</span>' : '<span class="bad">brak</span>');
+  } else {
+    el.textContent = 'Status: błąd';
+  }
+}
+async function saveRecovery(){
+  const pem = document.getElementById('recovery').value.trim();
+  const r = await fetch('/api/account/recovery', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({recovery_pub_pem: pem || null})});
+  await refreshStatus();
+}
+async function clearRecovery(){
+  const r = await fetch('/api/account/recovery', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({recovery_pub_pem: null})});
+  document.getElementById('recovery').value='';
+  await refreshStatus();
+}
+async function rotateKey(){
+  const out = document.getElementById('rotateOut');
+  out.textContent = 'Rotuję…';
+  const r = await fetch('/api/account/keys/rotate', {method:'POST'});
+  const j = await r.json();
+  out.textContent = JSON.stringify(j, null, 2);
+}
+refreshStatus();
+</script>
+</body>
+</html>

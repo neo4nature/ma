@@ -1,0 +1,19 @@
+{
+  "build_name": "ma65_settlement_compensation",
+  "internal_project_dir": "work_ma65",
+  "snapshot_date": "2026-04-12",
+  "summary": "Settlement compensation added for payout failures after successful treasury fee transfer; extra edge-case tests added.",
+  "highlights": [
+    "Added best-effort treasury fee compensation when payout fails after fee transfer",
+    "Extended settlement tests for fee-revert success and failure paths",
+    "Kept runtime behavior stable while hardening economic failure scenarios"
+  ],
+  "tests": {
+    "expected_passing": 43
+  },
+  "versioning_note": "External zip names progressed from ma47..ma57 while the internal working directory remains ma44. BUILD_INFO.json is the authoritative snapshot marker inside the bundle.",
+  "notes": "Settlement path now attempts to restore escrow if payout fails after treasury fee succeeded.",
+  "build": "ma65",
+  "latest_package": "ma65_settlement_compensation.zip",
+  "version": "ma65"
+}

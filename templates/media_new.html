@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>MA – Dodaj Media Manifest</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div style="max-width:980px;margin:18px auto 0;padding:0 16px;opacity:.92;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+    <div>
+      <a href="{{ url_for('system_routes.media_index') }}" style="text-decoration:none;">← Media</a>
+    </div>
+    <div>
+      Zalogowany jako <b>{{ me }}</b> • <a href="{{ url_for('auth.logout_route') }}">Wyloguj</a>
+    </div>
+  </div>
+
+  <div style="max-width:980px;margin:18px auto;padding:0 16px;">
+    <h2 style="margin:8px 0 6px;">Nowy manifest (podpis portfelem)</h2>
+    <p style="opacity:.85;margin:0 0 12px;">
+      To jest tylko <b>manifest</b> (metadane + lista chunków/CID). Hostingu/seedingu zrobimy jako następny etap.
+    </p>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div style="margin:10px 0;">
+          {% for m in messages %}
+            <div style="margin:6px 0;padding:10px 12px;border:1px solid rgba(255,255,255,.15);border-radius:12px;opacity:.92;">{{ m }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('system_routes.media_create') }}" style="margin-top:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <label>Tytuł</label>
+          <input name="title" placeholder="np. Gerudo Desert – test" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.2);color:inherit;">
+        </div>
+        <div>
+          <label>MIME</label>
+          <input name="mime" value="video/mp4" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.2);color:inherit;">
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label>Opis</label>
+        <textarea name="description" rows="4" placeholder="Krótki opis…" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.2);color:inherit;"></textarea>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+        <div>
+          <label>Widoczność</label>
+          <select name="visibility" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.2);color:inherit;">
+            <option value="public">public</option>
+            <option value="community">community</option>
+            <option value="private">private</option>
+          </select>
+        </div>
+        <div style="opacity:.8;font-size:13px;">
+          <div><b>public</b>: meta widoczne publicznie</div>
+          <div><b>community</b>: w przyszłości pod NRU</div>
+          <div><b>private</b>: meta ukryte (na razie tylko flaga)</div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label>Chunky/CID (1 na linię)</label>
+        <div style="opacity:.75;font-size:13px;margin:6px 0 8px;">
+          Nie masz jeszcze listy chunków? Użyj lokalnego narzędzia: <a href="/storage">Storage → Chunking</a>.
+        </div>
+        <textarea name="cids" rows="8" placeholder="cid_or_hash_1\ncid_or_hash_2\n..." style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.2);color:inherit;"></textarea>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:10px;align-items:center;">
+        <button style="padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:inherit;cursor:pointer;">Podpisz i dodaj manifest</button>
+        <a href="{{ url_for('system_routes.media_index') }}" style="opacity:.85;">Anuluj</a>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

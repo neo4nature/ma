@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="{{ lang or ui_lang or 'pl' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ t('comm_title') }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .wrap{max-width:1200px;margin:28px auto;padding:0 16px;display:grid;grid-template-columns:420px 1fr;gap:16px;align-items:start}
+    .card{background:rgba(10,12,20,.55);border:1px solid #222;border-radius:12px;padding:14px}
+    .muted{opacity:.75}
+    label{display:block;margin:10px 0 6px}
+    input,select,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #222;background:#0b0f18;color:#e9eefb}
+    textarea{min-height:92px;resize:vertical}
+    button{margin-top:10px;padding:10px 14px;border-radius:10px;border:1px solid #222;background:#0f1a2b;color:#e9eefb;cursor:pointer}
+    .thread{max-height:520px;overflow:auto}
+    .msg{border:1px solid #222;border-radius:12px;padding:10px;margin:10px 0;background:rgba(15,18,28,.5)}
+    .msg small{display:block;opacity:.65;margin-top:4px}
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2c2c2c;background:rgba(255,255,255,.06);font-size:12px}
+    .badge.unread{border-color:#4b2; color:#9affc7}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .conv{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #222;border-radius:12px;margin:8px 0;background:rgba(15,18,28,.35);text-decoration:none;color:inherit}
+    .conv.active{border-color:#6a5acd; box-shadow:0 0 0 1px rgba(106,90,205,.25) inset}
+    .error{color:#ff9a9a;margin-top:8px}
+    .ok{color:#9affc7;margin-top:8px}
+  </style>
+</head>
+<body data-theme="{{ theme or 'dark' }}" data-palette="{{ palette or 'neo' }}">
+  <div class="wrap">
+    <div class="card">
+      <div class="row">
+        <div>
+          <h2 style="margin:0 0 6px">{{ t('comm_title') }}</h2>
+          <div class="muted">{{ t('logged_in_as') }} <b>{{ me }}</b></div>
+        </div>
+        <div class="muted" style="text-align:right">
+          <span style="display:inline-flex;align-items:center;gap:8px;">
+            {{ t('language') }}:
+            <select id="langSel" style="width:auto;min-width:160px;">
+              {% for code,label in [('pl','Polski'),('en','English'),('de','Deutsch'),('la','Latina'),('es','Español'),('fr','Français'),('it','Italiano'),('nl','Nederlands'),('pt','Português')] %}
+                <option value="{{code}}" {% if (lang or ui_lang) == code %}selected{% endif %}>{{label}}</option>
+              {% endfor %}
+            </select>
+          </span>
+          <span style="margin-left:10px;">
+            <a href="{{ url_for('account_routes.account_route') }}">{{ t('nav_wallet') }}</a> •
+            <a href="{{ url_for('feed.timeline_route') }}">{{ t('nav_timeline') }}</a> •
+            <a href="{{ url_for('account_routes.account_route') }}">{{ t('nav_account') }}</a> •
+            <a href="{{ url_for('system_routes.story') }}">{{ t('nav_story') }}</a> •
+            <a href="{{ url_for('auth.logout_route') }}">{{ t('nav_logout') }}</a>
+          </span>
+        </div>
+      </div>
+
+      <script>
+        (function(){
+          const sel = document.getElementById('langSel');
+          if(!sel) return;
+          sel.addEventListener('change', () => {
+            const u = new URL(window.location.href);
+            u.searchParams.set('lang', sel.value);
+            window.location.href = u.toString();
+          });
+        })();
+      </script>
+
+      <hr style="border:0;border-top:1px solid #222;margin:14px 0">
+
+      <div class="row" style="margin-bottom:6px">
+        <h3 style="margin:0">{{ t('comm_inbox') }}</h3>
+        <span class="badge">{{ conversations|length }} {{ t('comm_threads') }}</span>
+      </div>
+
+      {% if conversations %}
+        {% for c in conversations %}
+          <a class="conv {% if active_peer==c.peer %}active{% endif %}" href="/comm?with={{ c.peer|urlencode }}">
+            <div>
+              <div><b>{{ c.peer }}</b></div>
+              <div class="muted" style="font-size:12px">{{ c.last_ts }}</div>
+            </div>
+            <div>
+              {% if c.unread and c.unread>0 %}
+                <span class="badge unread">{{ c.unread }} new</span>
+              {% else %}
+                <span class="badge">ok</span>
+              {% endif %}
+            </div>
+          </a>
+        {% endfor %}
+      {% else %}
+        <div class="muted">{{ t('comm_no_messages') }}</div>
+      {% endif %}
+
+      <hr style="border:0;border-top:1px solid #222;margin:14px 0">
+
+      <h3 style="margin:0 0 8px">{{ t('comm_send_message') }}</h3>
+      <label for="receiver">{{ t('comm_to') }}</label>
+      <select id="receiver">
+        {% for u in users %}<option value="{{u}}" {% if active_peer==u %}selected{% endif %}>{{u}}</option>{% endfor %}
+      </select>
+
+      <label for="body">{{ t('comm_body') }}</label>
+      <textarea id="body" placeholder="{{ t('comm_write_message') }}"></textarea>
+      <button id="sendBtn">{{ t('comm_send') }}</button>
+
+      <div id="err" class="error"></div>
+      <div id="ok" class="ok"></div>
+
+      <div class="muted" style="margin-top:10px">
+        {{ t('comm_add_user') }} <a href="{{ url_for('auth.register_route') }}">{{ t('comm_register') }}</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <h3 style="margin:0 0 6px">{{ t('comm_thread') }}</h3>
+          <div class="muted">{{ me }} ↔ {{ active_peer if active_peer else '—' }}</div>
+        </div>
+        <div>
+          <a href="{{ url_for('system_routes.home') }}">← {{ t('back_home') }}</a>
+        </div>
+      </div>
+
+      {% if active_peer %}
+        <div style="margin-top:10px">
+          <form method="post" action="{{ url_for('comm_send_money') }}" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end">
+            <input type="hidden" name="peer" value="{{ active_peer }}" />
+            <div>
+              <label>{{ t('comm_amount') }}</label>
+              <input name="amount" placeholder="np. 10" />
+            </div>
+            <div>
+              <label>{{ t('comm_description') }}</label>
+              <input name="description" placeholder="np. tip / test" />
+            </div>
+            <div>
+              <button type="submit">{{ t('comm_send_lc') }}</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="thread" class="thread" style="margin-top:12px"></div>
+      {% else %}
+        <div class="muted" style="margin-top:12px">{{ t('comm_choose_peer') }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <script>
+    window.MA_PING_ENABLED = {{ 'true' if ping_enabled else 'false' }};
+  </script>
+  <script src="{{ url_for('static', filename='js/pool_heartbeat.js') }}"></script>
+
+<script>
+  async function api(path, opts={}) {
+    const r = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error || 'API error');
+    return j;
+  }
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function threadKey(a,b){
+    return encodeURIComponent(`${a}__${b}`);
+  }
+
+  const me = {{ me|tojson }};
+  const activePeer = {{ active_peer|tojson }};
+
+  async function refreshThread(){
+    if(!activePeer) return;
+    const key = threadKey(me, activePeer);
+    const data = await api(`/comm/thread/${key}`);
+    const msgs = data.messages || [];
+    const box = document.getElementById('thread');
+    if(!msgs.length){
+      box.innerHTML = '<div class="muted">Brak wiadomości w tym wątku.</div>';
+      return;
+    }
+    box.innerHTML = msgs.map(m => {
+      const t = new Date((m.timestamp||0)*1000).toLocaleString();
+      const isMoney = (m.body||'').trim().startsWith('💠');
+      const body = m.body ? esc(m.body) : '<span class="muted">(zaszyfrowane)</span>';
+      return `<div class="msg${isMoney?' money':''}"><b>${esc(m.sender)}</b> → <b>${esc(m.receiver)}</b><div>${body}</div><small>${esc(t)}</small></div>`;
+    }).join('');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  document.getElementById('receiver')?.addEventListener('change', (e)=>{
+    const v = e.target.value;
+    window.location = `/comm?with=${encodeURIComponent(v)}`;
+  });
+
+  document.getElementById('sendBtn')?.addEventListener('click', async ()=>{
+    document.getElementById('err').textContent='';
+    document.getElementById('ok').textContent='';
+    const receiver = document.getElementById('receiver').value;
+    const body = document.getElementById('body').value;
+    try{
+      await api('/comm/send', {method:'POST', body: JSON.stringify({receiver, body})});
+      document.getElementById('body').value='';
+      document.getElementById('ok').textContent='Wysłano.';
+      // keep in sync with inbox
+      if(receiver !== activePeer){
+        window.location = `/comm?with=${encodeURIComponent(receiver)}`;
+      } else {
+        await refreshThread();
+      }
+    }catch(e){
+      document.getElementById('err').textContent = e.message;
+    }
+  });
+
+  refreshThread();
+</script>
+</body>
+</html>

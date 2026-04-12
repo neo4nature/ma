@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang='pl'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>MA · Assemble</title>
+  <link rel='stylesheet' href='/static/css/style.css'>
+</head>
+<body>
+<div class='container' style='max-width:980px;margin:18px auto;padding:0 16px;'>
+  <p>Zalogowany jako <b>{{ me }}</b></p>
+  <p>
+    <a href='/'>Start</a> • <a href='/media'>Media</a> • <a href='/storage'>Storage</a> • <a href='/feed'>Feed</a> • <a href='/logout'>Wyloguj</a>
+  </p>
+
+  <h2>Assemble · z listy chunków</h2>
+  <div class='card'>
+    <form method='post' action='/storage/assemble/create'>
+      <label>Nazwa pliku (opcjonalnie)</label>
+      <input name='filename' placeholder='video.mp4' style='width:100%;margin:6px 0 12px;'>
+
+      <label>MIME (np. video/mp4, audio/mpeg)</label>
+      <input name='mime' placeholder='video/mp4' style='width:100%;margin:6px 0 12px;'>
+
+      <label>Lista chunków (SHA256 hex, po jednym na linię)</label>
+      <textarea name='chunks' style='width:100%;height:220px;margin:6px 0 12px;'></textarea>
+
+      <button type='submit'>Utwórz i podgląd</button>
+    </form>
+  </div>
+
+  <div class='card'>
+    <h3>Ostatnie uploady (kliknij aby wstawić listę)</h3>
+    {% if uploads and uploads|length %}
+      <ul>
+      {% for u in uploads %}
+        <li>
+          <a href='#' onclick='fillChunks({{ u.chunks|tojson }}); return false;'>{{ u.filename or u.id }} ({{ u.total_bytes }} B, {{ u.chunks|length }} chunków)</a>
+        </li>
+      {% endfor %}
+      </ul>
+    {% else %}
+      <p>Brak zapisanych uploadów. Najpierw użyj /storage.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function fillChunks(list) {
+  const ta = document.querySelector("textarea[name='chunks']");
+  if (!ta) return;
+  ta.value = (list || []).join("
+");
+  ta.focus();
+}
+</script>
+</body>
+</html>

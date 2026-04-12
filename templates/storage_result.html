@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MA · Storage Result</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body>
+    <div style="max-width:980px;margin:18px auto 0;padding:0 16px;opacity:.92;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <div>
+        Zalogowany jako <b>{{ me }}</b>
+      </div>
+      <div>
+        <a href="/">Start</a> • <a href="/media">Media</a> • <a href="/feed">Feed</a> • <a href="/logout">Wyloguj</a>
+      </div>
+    </div>
+    <div style="max-width:980px;margin:18px auto 0;padding:0 16px;">
+      <h2>Storage · wynik</h2>
+      <div class="card">
+        <div><b>File ID:</b> {{ file_id }}</div>
+        <div><b>Nazwa:</b> {{ filename }}</div>
+        <div><b>Rozmiar:</b> {{ total_bytes }} bytes</div>
+        <div><b>Chunk size:</b> {{ chunk_size }} bytes</div>
+        <div><b>Liczba chunków:</b> {{ chunks|length }}</div>
+      </div>
+
+      <div class="card">
+        <h3>Wklej do Media Manifest (lista chunków)</h3>
+        <textarea style="width:100%;height:220px;" readonly>{{ chunk_ids_text }}</textarea>
+        <p style="margin-top:8px;">
+          <a href="/media/new">Przejdź do tworzenia manifestu</a> · <a href="/storage">Wróć do storage</a>
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>Podgląd chunków</h3>
+        <table>
+          <tr><th>#</th><th>sha256</th><th>size</th><th>link</th></tr>
+          {% for c in chunks %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td><code>{{ c.sha256_hex }}</code></td>
+              <td>{{ c.size }}</td>
+              <td><a href="/storage/chunk/{{ c.sha256_hex }}" target="_blank">open</a></td>
+            </tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </body>
+</html>

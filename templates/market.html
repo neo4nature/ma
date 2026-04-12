@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="{{ lang or ui_lang or 'pl' }}">
+<head>
+  <meta charset="utf-8">
+  <title>{{ t('market_title') }} – MA</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;}
+    /* Market uses light cards on dark background -> force readable text */
+    .card{border:1px solid #ddd;border-radius:10px;padding:12px;background:#fff;color:#111;}
+    .thumb{width:100%;height:200px;object-fit:cover;border-radius:8px;border:1px solid #eee;background:#f7f7f7}
+    .muted{opacity:.78;font-size:.9em;color:#222}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input,textarea,select{width:100%;padding:8px;border-radius:8px;border:1px solid #ccc}
+    button{padding:8px 12px;border-radius:8px;border:1px solid #333;background:#111;color:#fff;cursor:pointer}
+    button.secondary{background:#fff;color:#111;border:1px solid #888}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #ddd;font-size:.85em}
+    a{color:#1f55ff}
+  </style>
+</head>
+<body data-theme="{{ theme or 'dark' }}" data-palette="{{ palette or 'neo' }}">
+  <h1>{{ t('market_title') }}</h1>
+  <p class="muted">{{ t('market_subtitle') }}</p>
+
+  <div class="row" style="margin:8px 0 18px;">
+    <a href="{{ url_for('system_routes.home') }}">← {{ t('back_home') }}</a>
+    <span class="muted" style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+      {{ t('language') }}:
+      <select id="langSel" style="width:auto;min-width:160px;">
+        {% for code,label in [('pl','Polski'),('en','English'),('de','Deutsch'),('la','Latina'),('es','Español'),('fr','Français'),('it','Italiano'),('nl','Nederlands'),('pt','Português')] %}
+          <option value="{{code}}" {% if (lang or ui_lang) == code %}selected{% endif %}>{{label}}</option>
+        {% endfor %}
+      </select>
+    </span>
+    {% if me %}
+      <span class="pill">{{ t('logged_in_as') }} {{ me }}</span>
+    {% else %}
+      <a class="pill" href="{{ url_for('auth.login_route', next=url_for('market_storage.market')) }}">{{ t('market_login_to_trade') }}</a>
+    {% endif %}
+  </div>
+
+  <script>
+    (function(){
+      const sel = document.getElementById('langSel');
+      if(!sel) return;
+      sel.addEventListener('change', () => {
+        const u = new URL(window.location.href);
+        u.searchParams.set('lang', sel.value);
+        window.location.href = u.toString();
+      });
+    })();
+  </script>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h2>{{ t('market_pool_title') }}</h2>
+    <p class="muted" style="margin-top:0;">{{ t('market_pool_desc') }}</p>
+
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">
+      <div class="card" style="margin:0;">
+        <h3 style="margin:0 0 6px;">Compute</h3>
+        <div class="row" style="justify-content:space-between;">
+          <span class="pill">węzły: {{ (pool.compute.nodes|length) if pool else 0 }}</span>
+          <span class="pill">usable: {{ pool.compute.usable_mem_mb if pool else 0 }} MB</span>
+        </div>
+        <div class="muted" style="margin-top:6px;">declared: {{ pool.compute.declared_mem_mb if pool else 0 }} MB</div>
+        <div class="muted" style="margin-top:6px;">cena compute: <span id="computePrice">—</span></div>
+        {% if pool and pool.compute.nodes and pool.compute.nodes|length > 0 %}
+          <details style="margin-top:8px;">
+            <summary class="muted">pokaż węzły</summary>
+            <ul>
+              {% for n in pool.compute.nodes %}
+                <li class="muted">{{ n.username }} · {{ n.declared_mem_mb }} MB · {{ n.slider_pos }}%</li>
+              {% endfor %}
+            </ul>
+          </details>
+        {% endif %}
+      </div>
+
+      <div class="card" style="margin:0;">
+        <h3 style="margin:0 0 6px;">Storage</h3>
+        <div class="row" style="justify-content:space-between;">
+          <span class="pill">pola: {{ (pool.storage.fields|length) if pool else 0 }}</span>
+          <span class="pill">usable: {{ ("%.1f"|format(pool.storage.usable_gb)) if pool else "0.0" }} GB</span>
+        </div>
+        <div class="muted" style="margin-top:6px;">declared: {{ pool.storage.declared_gb if pool else 0 }} GB</div>
+        {% if pool and pool.storage.fields and pool.storage.fields|length > 0 %}
+          <details style="margin-top:8px;">
+            <summary class="muted">pokaż pola</summary>
+            <ul>
+              {% for f in pool.storage.fields %}
+                <li class="muted">{{ f.username }} · field {{ f.field_id }} · {{ f.gb }} GB · {{ f.status }}</li>
+              {% endfor %}
+            </ul>
+          </details>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="muted" style="margin-top:10px;">Tip: żeby pozostać widocznym w puli, portfel może wysyłać heartbeat (API: /api/pool/ping).</div>
+  </div>
+
+  {% if me %}
+  <div class="card" style="margin-bottom:16px;">
+    <h2>Zleć zadanie do puli (PROTOTYP)</h2>
+    <p class="muted" style="margin-top:0;">Etap 1: zapisujemy "job" i plik wejściowy. W kolejnych wersjach job będzie rozdzielany na węzły z Compute Pool.</p>
+    <form action="{{ url_for('compute.compute_create_route') }}" method="post" enctype="multipart/form-data">
+      <div class="row">
+        <div style="flex:1;min-width:240px;">
+          <label>Typ zadania</label>
+          <select name="kind">
+            <option value="render_stub">render_stub (na razie zapis do kolejki)</option>
+            <option value="thumb_v1">thumb_v1 (miniaturka: obraz lub wideo)</option>
+          </select>
+        </div>
+        <div style="flex:2;min-width:260px;">
+          <label>Plik wejściowy</label>
+          <input name="job_file" type="file" required>
+        </div>
+      </div>
+      <button type="submit">Dodaj job</button>
+    </form>
+
+    {% if jobs and jobs|length > 0 %}
+      <details style="margin-top:10px;">
+        <summary class="muted">Twoje joby ({{ jobs|length }})</summary>
+        <ul>
+          {% for j in jobs %}
+            <li class="muted">
+              <b>{{ j.kind }}</b> · {{ j.status }} · {{ j.id[:8] }}…
+              {% if j.claimed_by %} · worker: {{ j.claimed_by }}{% endif %}
+              {% if j.status in ['QUEUED','WORKING','CLAIMED','CANCEL_REQUESTED'] %}
+                · <button type="button" class="linklike" onclick="cancelJob('{{ j.id }}')">wycofaj</button>
+              {% endif %}
+              {% if j.status == 'CANCEL_REQUESTED' %}
+                · <span style="opacity:.75;">(czeka na anulowanie)</span>
+              {% endif %}
+              {% if j.result_relpath %}
+                · <a href="{{ url_for('media', relpath=j.result_relpath) }}">wynik</a>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </details>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if me %}
+  <div class="card" style="margin-bottom:16px;">
+    <h2>Dodaj ofertę</h2>
+    <form action="{{ url_for('market_storage.market_create') }}" method="post" enctype="multipart/form-data">
+      <div class="row">
+        <div style="flex:1;min-width:240px;">
+          <label>Tytuł</label>
+          <input name="title" placeholder="np. Drewniany triskelion" required>
+        </div>
+        <div style="width:160px;">
+          <label>Cena (LC)</label>
+          <input name="price" type="number" step="0.01" min="0" required>
+        </div>
+      </div>
+      <label>Opis</label>
+      <textarea name="description" rows="3" placeholder="Krótko: stan, wymiary, co zawiera..."></textarea>
+      <div class="row">
+        <div style="flex:1;min-width:240px;">
+          <label>Zdjęcie (opcjonalnie)</label>
+          <input name="photo" type="file" accept="image/*">
+        </div>
+        <div style="width:220px;">
+          <label>Studio background</label>
+          <select name="bg_mode">
+            <option value="auto">auto</option>
+            <option value="white">white</option>
+            <option value="gradient">gradient</option>
+            <option value="blur">blur</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit">Dodaj</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <h2>Oferty</h2>
+  <div class="grid">
+    {% for it in listings %}
+      <div class="card">
+        {% if it.thumb_path %}
+          <img class="thumb" src="{{ url_for('media', relpath=it.thumb_path) }}" alt="thumb">
+        {% else %}
+          <div class="thumb" style="display:flex;align-items:center;justify-content:center;">brak zdjęcia</div>
+        {% endif %}
+        <h3 style="margin:10px 0 6px;">{{ it.title }}</h3>
+        <div class="muted">Sprzedawca: {{ it.seller }} · Status: {{ it.status }}</div>
+        <p>{{ it.description }}</p>
+        <div class="row" style="justify-content:space-between;">
+          <strong>{{ '%.2f'|format(it.price) }} {{ it.currency }}</strong>
+          {% if me and it.status == 'ACTIVE' and it.seller != me %}
+            <form action="{{ url_for('market_buy', listing_id=it.listing_id) }}" method="post">
+              <button type="submit">Kup</button>
+            </form>
+          {% elif it.status == 'SOLD' %}
+            <span class="pill">Kupione przez: {{ it.owner or '—' }}</span>
+          {% else %}
+            <span class="pill">—</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if me %}
+  <h2 style="margin-top:18px;">Twoje transakcje marketu</h2>
+  <div class="card">
+    {% if purchases and purchases|length > 0 %}
+      <ul>
+        {% for p in purchases %}
+          <li class="muted">{{ p.ts }} · {{ p.buyer }} → {{ p.seller }} · {{ p.amount }} {{ p.currency }} · listing {{ p.listing_id }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="muted">Brak.</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+<script>
+  // Keep node visible as LIVE in pool even when navigating away from Wallet.
+  async function poolPing(){
+    try{ await fetch('/api/pool/ping', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}); }catch(e){}
+  }
+
+  // Local worker tick (prototype): if this user contributes compute, allow jobs to progress
+  // even when browsing other sections (Market/Feed).
+  async function workerTick(){
+    try{ await fetch('/api/compute/worker/tick', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}); }catch(e){}
+  }
+
+
+
+  async function pricingRefresh(){
+    try{
+      const r = await fetch('/api/pricing');
+      const j = await r.json();
+      const c = (j && j.compute) ? j.compute : null;
+      if(c){
+        const mult = Number(c.multiplier||1).toFixed(2);
+        const eff = Number(c.effective_cost_units||0).toFixed(4);
+        const base = Number(c.base_cost_units||1).toFixed(4);
+        const el = document.getElementById('computePrice');
+        if(el) el.textContent = `${eff} Units (base ${base} × ${mult})`;
+      }
+    }catch(e){}
+  }
+
+  async function cancelJob(jobId){
+    if(!jobId) return;
+    if(!confirm('Wycofać job z kolejki?')) return;
+    try{
+      const res = await fetch('/api/compute/job/cancel', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({job_id: jobId})
+      });
+      const j = await res.json().catch(()=>({}));
+      if(j && j.ok && j.canceled){ location.reload(); return; }
+      alert('Nie udało się wycofać (może już jest w trakcie).');
+    }catch(e){
+      alert('Błąd sieci.');
+    }
+  }
+
+  {% if me %}
+    pricingRefresh();
+    poolPing();
+    setInterval(poolPing, 60*1000);
+    setInterval(pricingRefresh, 60*1000);
+    {% if contrib and (contrib.slider_pos|int) > 0 %}
+      workerTick();
+      setInterval(workerTick, 10*1000);
+    {% endif %}
+  {% endif %}
+</script>
+
+</body>
+</html>

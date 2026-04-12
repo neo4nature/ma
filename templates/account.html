@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MA — Konto</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .wrap{max-width:860px;margin:28px auto;padding:0 16px}
+    .card{background:rgba(10,12,20,.55);border:1px solid #222;border-radius:12px;padding:14px}
+    .muted{opacity:.75}
+    label{display:block;margin:10px 0 6px}
+    input,select,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #222;background:#0b0f18;color:#e9eefb}
+    button{margin-top:10px;padding:10px 14px;border-radius:10px;border:1px solid #222;background:#0f1a2b;color:#e9eefb;cursor:pointer}
+    .row{display:flex;gap:12px;align-items:center;justify-content:space-between}
+    .badge{display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid #2c2c2c;background:rgba(255,255,255,.06);font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="row">
+        <div>
+          <h2 style="margin:0 0 6px">Konto</h2>
+          <div class="muted">Zalogowany jako: <b>{{ me }}</b> • Signer: <span class="badge">{{ signer_mode }}</span></div>
+        </div>
+        <div class="muted" style="text-align:right">
+          <a href="/comm">Komunikator</a> •
+          <a href="{{ url_for('market_storage.market') }}">Wallet</a>
+        <a href="{{ url_for('feed.timeline_route') }}">Timeline</a> •
+          <a href="{{ url_for('auth.logout_route') }}">Wyloguj</a>
+        </div>
+      </div>
+
+      <hr style="border:0;border-top:1px solid #222;margin:14px 0">
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div class="muted" style="margin-bottom:10px">
+            {% for m in messages %}<div>• {{ m }}</div>{% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <h3 style="margin:0 0 8px">Bezpieczeństwo logowania</h3>
+      <div class="muted">Opcjonalnie możesz przypisać konto do fingerprintu urządzenia (tryb firmware). Gdy opcja jest włączona, logowanie będzie wymagało tego samego urządzenia.</div>
+
+      <form method="post" style="margin-top:12px">
+        <label style="display:flex;gap:10px;align-items:center">
+          <input type="checkbox" name="require_device" {% if require_device %}checked{% endif %} style="width:auto">
+          Wymagaj przypisanego urządzenia przy logowaniu
+        </label>
+
+        <div style="margin-top:10px">
+          <div class="muted">Przypisany fingerprint:</div>
+          <div><code>{{ device_fingerprint or '— brak —' }}</code></div>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <button type="submit" name="action" value="save">Zapisz ustawienia</button>
+          <button type="submit" name="action" value="bind">Przypisz aktualne urządzenie</button>
+        </div>
+      </form>
+
+      {% if device_identity %}
+        <hr style="border:0;border-top:1px solid #222;margin:14px 0">
+        <h3 style="margin:0 0 8px">Status urządzenia</h3>
+        <pre style="white-space:pre-wrap;opacity:.9">{{ device_identity | tojson(indent=2) }}</pre>
+      {% endif %}
+
+      <div style="margin-top:14px"><a href="{{ url_for('system_routes.home') }}">← Powrót do MA</a></div>
+    </div>
+  </div>
+</body>
+</html>

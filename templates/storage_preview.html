@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang='pl'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>MA · Preview</title>
+  <link rel='stylesheet' href='/static/css/style.css'>
+</head>
+<body>
+<div style='max-width:980px;margin:18px auto;padding:0 16px;'>
+  <p>Zalogowany jako <b>{{ me }}</b></p>
+  <p>
+    <a href='/storage'>Storage</a> • <a href='/storage/assemble'>Assemble</a> • <a href='/media/new'>Media manifest</a>
+  </p>
+
+  <h2>Preview · {{ a.filename }}</h2>
+  <div class='card'>
+    <div><b>Assembly:</b> <code>{{ a.assembly_id }}</code></div>
+    <div><b>MIME:</b> {{ a.mime }}</div>
+    <div><b>Rozmiar:</b> {{ a.total_bytes }} bytes</div>
+    <div><b>Chunks:</b> {{ a.chunks|length }}</div>
+    <div style='margin-top:10px;'>
+      <a href='/storage/stream/{{ a.assembly_id }}' target='_blank'>Otwórz strumień</a>
+    </div>
+  </div>
+
+  {% if is_video %}
+    <div class='card'>
+      <h3>Podgląd video</h3>
+      <video controls style='width:100%;max-height:520px;' src='/storage/stream/{{ a.assembly_id }}'></video>
+    </div>
+  {% elif is_audio %}
+    <div class='card'>
+      <h3>Podgląd audio</h3>
+      <audio controls style='width:100%;' src='/storage/stream/{{ a.assembly_id }}'></audio>
+    </div>
+  {% else %}
+    <div class='card'>
+      <p>Ten typ MIME nie ma wbudowanego podglądu. Użyj linku „Otwórz strumień”.</p>
+    </div>
+  {% endif %}
+
+  <div class='card'>
+    <h3>Wklej do Media Manifest</h3>
+    <textarea style='width:100%;height:220px;' readonly>{{ a.chunks|join('
+') }}</textarea>
+  </div>
+</div>
+</body>
+</html>

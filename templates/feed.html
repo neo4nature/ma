@@ -1,0 +1,942 @@
+<!doctype html>
+<html lang="{{ lang or ui_lang or 'pl' }}">
+<head>
+  <meta charset="utf-8">
+  <title>{{ t('feed') }} – MA</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .feed-wrapper {
+      max-width: 780px;
+      margin: 2.5rem auto;
+      color: var(--text-main);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+      /* domyślne zmienne dla Feedu */
+      --feed-accent: #b58cff;
+      --feed-accent-soft: rgba(181, 140, 255, 0.22);
+      --feed-border-soft: rgba(255, 255, 255, 0.09);
+
+      --feed-surface-dark: rgba(10, 10, 20, 0.95);
+      --feed-surface-dark-soft: rgba(10, 10, 20, 0.9);
+      --feed-surface-light: rgba(247, 247, 255, 0.98);
+      --feed-surface-light-soft: rgba(242, 242, 252, 0.96);
+      --feed-text-dark: #0e0e15;
+    }
+
+    /* PALETY – cztery różne światy kolorów */
+    .feed-wrapper[data-palette="neo"] {
+      --feed-accent: #b58cff;
+      --feed-accent-soft: rgba(181, 140, 255, 0.28);
+    }
+
+    .feed-wrapper[data-palette="forest"] {
+      --feed-accent: #5bd28f;
+      --feed-accent-soft: rgba(91, 210, 143, 0.28);
+    }
+
+    .feed-wrapper[data-palette="amber"] {
+      --feed-accent: #ffb454;
+      --feed-accent-soft: rgba(255, 180, 84, 0.30);
+    }
+
+    .feed-wrapper[data-palette="brown"] {
+      --feed-accent: #c28a5a;
+      --feed-accent-soft: rgba(194, 138, 90, 0.34);
+    }
+
+    /* górny pasek: mały link + duża kafelka powrotu */
+    .feed-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.2rem;
+      gap: 1rem;
+    }
+
+    .feed-back-link {
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+
+    .feed-back-link a {
+      color: var(--accent-standard);
+      text-decoration: none;
+    }
+
+    .feed-home-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.55rem 1.4rem;
+      border-radius: 999px;
+      text-decoration: none;
+      background: var(--feed-accent);
+      color: #111111;
+      font-weight: 600;
+      font-size: 0.9rem;
+      box-shadow: 0 14px 26px var(--feed-accent-soft);
+      border: 1px solid rgba(0, 0, 0, 0.25);
+      transition:
+        transform 140ms ease-out,
+        box-shadow 160ms ease-out,
+        background 140ms ease-out;
+    }
+
+    .feed-home-chip:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 32px var(--feed-accent-soft);
+      background: #ffe;
+    }
+
+    .feed-home-arrow {
+      font-size: 1.2rem;
+    }
+
+    .feed-header {
+      margin-bottom: 1.8rem;
+    }
+
+    .feed-header h1 {
+      font-size: 1.9rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .feed-header p {
+      font-size: 0.95rem;
+      opacity: 0.8;
+    }
+
+    /* Ekran wyboru trybu 13 / 21 */
+    .feed-mode-chooser {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.4rem;
+      margin-top: 1.8rem;
+    }
+
+    .feed-mode-card {
+      border-radius: 26px;
+      padding: 1.5rem 1.6rem;
+      border: 1px solid var(--feed-border-soft);
+      backdrop-filter: blur(18px);
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      transition:
+        transform 160ms ease-out,
+        box-shadow 160ms ease-out,
+        border-color 160ms ease-out,
+        background 160ms ease-out;
+      box-shadow: 0 22px 40px rgba(0, 0, 0, 0.8),
+                  0 0 18px var(--feed-accent-soft);
+    }
+
+    .feed-wrapper[data-theme="dark"] .feed-mode-card {
+      background: var(--feed-surface-dark);
+    }
+
+    .feed-wrapper[data-theme="light"] .feed-mode-card {
+      background: var(--feed-surface-light);
+      color: var(--feed-text-dark);
+      border-color: rgba(0, 0, 0, 0.08);
+      box-shadow: 0 18px 32px rgba(0, 0, 0, 0.2),
+                  0 0 18px var(--feed-accent-soft);
+    }
+
+    .feed-mode-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 26px 46px rgba(0, 0, 0, 0.9),
+                  0 0 22px var(--feed-accent-soft);
+      border-color: var(--feed-accent);
+      background: rgba(15, 15, 30, 0.98);
+    }
+
+    .feed-wrapper[data-theme="light"] .feed-mode-card:hover {
+      border-color: var(--feed-accent);
+      background: #ffffff;
+    }
+
+    .feed-mode-title {
+      font-size: 1.5rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .feed-mode-sub {
+      font-size: 0.95rem;
+      opacity: 0.85;
+      line-height: 1.4;
+    }
+
+    /* Filtry preferencji */
+    .feed-filters {
+      margin: 1.2rem 0 1.6rem;
+      padding: 1.1rem 1.2rem;
+      border-radius: 22px;
+      border: 1px solid var(--feed-accent-soft);
+      backdrop-filter: blur(16px);
+      font-size: 0.9rem;
+      box-shadow: 0 0 18px var(--feed-accent-soft);
+    }
+
+    .feed-wrapper[data-theme="dark"] .feed-filters {
+      background: var(--feed-surface-dark-soft);
+    }
+
+    .feed-wrapper[data-theme="light"] .feed-filters {
+      background: var(--feed-surface-light-soft);
+      color: var(--feed-text-dark);
+      border-color: rgba(0, 0, 0, 0.08);
+    }
+
+    .feed-filters legend {
+      padding: 0 0.3rem;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      opacity: 0.9;
+    }
+
+    .feed-theme-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.8rem;
+      margin-top: 0.7rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .feed-theme-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+    }
+
+    .feed-theme-caption {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      opacity: 0.7;
+    }
+
+    .palette-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      border: 2px solid transparent;
+      padding: 0;
+      cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+      transition:
+        transform 120ms ease-out,
+        box-shadow 140ms ease-out,
+        border-color 140ms ease-out;
+    }
+
+    .palette-swatch[data-palette="neo"] {
+      background: linear-gradient(135deg, #b58cff, #6bb8ff);
+    }
+
+    .palette-swatch[data-palette="forest"] {
+      background: linear-gradient(135deg, #2fa56a, #77ddaa);
+    }
+
+    .palette-swatch[data-palette="amber"] {
+      background: linear-gradient(135deg, #ffb454, #ff8a3c);
+    }
+
+    .palette-swatch[data-palette="brown"] {
+      background: linear-gradient(135deg, #c28a5a, #8b5a33);
+    }
+
+    .palette-swatch.is-active {
+      border-color: #ffffff;
+      box-shadow: 0 0 0 2px var(--feed-accent-soft), 0 0 12px var(--feed-accent-soft);
+      transform: translateY(-1px);
+    }
+
+    .mode-dot {
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      padding: 0;
+      cursor: pointer;
+      font-size: 0.9rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      transition:
+        transform 120ms ease-out,
+        box-shadow 140ms ease-out,
+        border-color 140ms ease-out,
+        background 140ms ease-out,
+        color 140ms ease-out;
+    }
+
+    .mode-dot.is-active {
+      background: var(--feed-accent-soft);
+      border-color: var(--feed-accent);
+      box-shadow: 0 0 10px var(--feed-accent-soft);
+      transform: translateY(-1px);
+    }
+
+    .feed-wrapper[data-theme="light"] .mode-dot {
+      border-color: rgba(0, 0, 0, 0.4);
+      color: var(--feed-text-dark);
+    }
+
+    .feed-filters-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.7rem;
+    }
+
+    .feed-compose {
+      margin: 1.2rem 0 1.6rem;
+      padding: 1.1rem 1.2rem;
+      border-radius: 22px;
+      border: 1px solid var(--feed-accent-soft);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 0 18px var(--feed-accent-soft);
+    }
+
+    .feed-wrapper[data-theme="dark"] .feed-compose {
+      background: var(--feed-surface-dark-soft);
+    }
+
+    .feed-wrapper[data-theme="light"] .feed-compose {
+      background: var(--feed-surface-light-soft);
+      color: var(--feed-text-dark);
+      border-color: rgba(0, 0, 0, 0.08);
+    }
+
+    .feed-compose textarea {
+      width: 100%;
+      min-height: 96px;
+      resize: vertical;
+      border-radius: 18px;
+      padding: 0.9rem 1rem;
+      border: 1px solid var(--feed-border-soft);
+      background: rgba(0,0,0,0.15);
+      color: inherit;
+      outline: none;
+    }
+
+    .feed-wrapper[data-theme="light"] .feed-compose textarea {
+      background: rgba(255,255,255,0.9);
+      border-color: rgba(0,0,0,0.12);
+      color: var(--feed-text-dark);
+    }
+
+    .verified-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      margin-left: 0.55rem;
+      border: 1px solid var(--feed-accent-soft);
+      background: rgba(0, 0, 0, 0.22);
+    }
+
+    .feed-wrapper[data-theme="light"] .verified-badge {
+      background: rgba(255,255,255,0.85);
+    }
+
+    .feed-pill {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.95rem;
+      border-radius: 999px;
+      background: rgba(20, 20, 35, 0.9);
+      border: 1px solid var(--feed-border-soft);
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition:
+        background 140ms ease-out,
+        border-color 140ms ease-out,
+        box-shadow 140ms ease-out,
+        transform 120ms ease-out,
+        color 120ms ease-out;
+    }
+
+    .feed-wrapper[data-theme="light"] .feed-pill {
+      background: rgba(255, 255, 255, 0.9);
+      border-color: rgba(0, 0, 0, 0.08);
+      color: var(--feed-text-dark);
+    }
+
+    /* ukryty checkbox, ale zostaje w formularzu */
+    .feed-pill input[type="checkbox"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+    }
+
+    .feed-pill span {
+      pointer-events: none;
+    }
+
+    .feed-pill:hover {
+      background: rgba(35, 35, 55, 0.95);
+      transform: translateY(-1px);
+    }
+
+    .feed-wrapper[data-theme="light"] .feed-pill:hover {
+      background: #ffffff;
+    }
+
+    /* zaznaczona preferencja – świeci cała pigułka, tekst domyślnie CZARNY */
+    .feed-pill:has(input[type="checkbox"]:checked) {
+      background: var(--feed-accent);
+      border-color: var(--feed-accent);
+      box-shadow: 0 0 16px var(--feed-accent-soft);
+      color: #000000;
+    }
+
+    /* wyjątek: paleta brązowa – tam zostawiamy biały tekst */
+    .feed-wrapper[data-palette="brown"] .feed-pill:has(input[type="checkbox"]:checked) {
+      color: #ffffff;
+    }
+
+    .feed-pill-strong {
+      font-weight: 600;
+    }
+
+    .feed-filters button {
+      margin-top: 0.9rem;
+      padding: 0.45rem 1.2rem;
+      border-radius: 999px;
+      border: none;
+      background: var(--feed-accent-soft);
+      color: #ffffff;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 140ms ease-out, transform 120ms ease-out, box-shadow 140ms ease-out;
+    }
+
+    .feed-filters button:hover {
+      background: var(--feed-accent);
+      box-shadow: 0 0 14px var(--feed-accent-soft);
+      transform: translateY(-1px);
+    }
+
+    /* Posty – z poświatą w kolorze palety */
+    .feed-post {
+      margin-bottom: 1.2rem;
+      padding: 1.2rem 1.4rem;
+      border-radius: 22px;
+      border: 1px solid var(--feed-border-soft);
+      backdrop-filter: blur(16px);
+      box-shadow:
+        0 18px 36px rgba(0, 0, 0, 0.75),
+        0 0 18px var(--feed-accent-soft);
+    }
+
+    .feed-wrapper[data-theme="dark"] .feed-post {
+      background: var(--feed-surface-dark);
+    }
+
+    .feed-wrapper[data-theme="light"] .feed-post {
+      background: #ffffff;
+      color: var(--feed-text-dark);
+      border-color: rgba(0, 0, 0, 0.06);
+      box-shadow:
+        0 12px 26px rgba(0, 0, 0, 0.18),
+        0 0 16px var(--feed-accent-soft);
+    }
+
+    .feed-post-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.4rem;
+      margin-bottom: 0.45rem;
+      font-size: 0.95rem;
+    }
+
+    .feed-post-author {
+      font-weight: 600;
+    }
+
+    .feed-post-meta {
+      opacity: 0.6;
+      font-size: 0.85rem;
+    }
+
+    .feed-wrapper[data-theme="light"] .feed-post-meta {
+      opacity: 0.65;
+    }
+
+    .feed-post-community {
+      font-size: 0.8rem;
+      padding: 0.18rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      opacity: 0.85;
+      margin-left: auto;
+    }
+
+    .feed-wrapper[data-theme="light"] .feed-post-community {
+      border-color: rgba(0, 0, 0, 0.18);
+    }
+
+    .feed-post-text {
+      font-size: 1rem;
+      line-height: 1.45;
+      opacity: 0.95;
+    }
+
+    @media (max-width: 768px) {
+      .feed-mode-chooser {
+        grid-template-columns: 1fr;
+      }
+
+      .feed-top-bar {
+        flex-direction: column-reverse;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body data-theme="{{ theme or 'dark' }}" data-palette="{{ palette or 'neo' }}">
+  <!-- domyślnie: paleta "neo", tryb "dark" -->
+  <div class="feed-wrapper" data-palette="{{ palette or 'neo' }}" data-theme="{{ theme or 'dark' }}">
+
+    <div class="feed-top-bar">
+      <div class="feed-back-link">
+        <a href="{{ url_for('system_routes.home') }}">{{ t('back') }}</a>
+      </div>
+      <a href="{{ url_for('system_routes.home') }}" class="feed-home-chip">
+        <span class="feed-home-arrow">←</span>
+        <span class="feed-home-text">{{ t('home') }}</span>
+      </a>
+    </div>
+
+    {% if not mode %}
+      <!-- EKRAN WYBORU TRYBU 13 / 21 -->
+      <div class="feed-header">
+        <h1>{{ t('feed') }}</h1>
+        <p>{{ t('choose_mode') }}</p>
+      </div>
+
+      <div class="feed-mode-chooser">
+        <a href="{{ url_for('feed.feed_route', mode='13') }}" class="feed-mode-card">
+          <div class="feed-mode-title">{{ t("mode13_title") }}</div>
+          <div class="feed-mode-sub">
+            {{ t("mode13_desc") }}
+          </div>
+        </a>
+        <a href="{{ url_for('feed.feed_route', mode='21') }}" class="feed-mode-card">
+          <div class="feed-mode-title">{{ t("mode21_title") }}</div>
+          <div class="feed-mode-sub">
+            {{ t("mode21_desc") }}
+          </div>
+        </a>
+      </div>
+
+    {% else %}
+      <!-- TRYB WYBRANY: 13 LUB 21 -->
+      <div class="feed-header">
+        <h1>{{ t('feed') }} – tryb {{ mode }}</h1>
+        <p>{{ t('prefs_intro') }}</p>
+      </div>
+
+      <!-- Formularz wyboru preferencji -->
+      
+      <button type="button" id="toggle-prefs" class="feed-pill" style="margin:0.4rem 0;">⚙ {{ t('prefs') }}</button>
+<form method="get" class="feed-filters" id="prefs-form">
+        <fieldset>
+	        <legend>{{ t('prefs') }}</legend>
+
+          <!-- zachowujemy tryb w URL -->
+          <input type="hidden" name="mode" value="{{ mode }}">
+          <input type="hidden" name="palette" id="palette-field" value="{{ palette or 'neo' }}">
+          <input type="hidden" name="theme" id="theme-field" value="{{ theme or 'dark' }}">
+          <input type="hidden" name="lang" id="lang-field" value="{{ lang or ui_lang or 'pl' }}">
+
+          <!-- Rząd: paleta kolorów + dark / light -->
+          <div class="feed-theme-row">
+            <div class="feed-theme-group">
+              <span class="feed-theme-caption">{{ t("palette") }}</span>
+              <button type="button" class="palette-swatch is-active" data-palette="neo" title="Neo"></button>
+              <button type="button" class="palette-swatch" data-palette="forest" title="Forest"></button>
+              <button type="button" class="palette-swatch" data-palette="amber" title="Amber"></button>
+              <button type="button" class="palette-swatch" data-palette="brown" title="Brown"></button>
+            </div>
+            <div class="feed-theme-group">
+              <span class="feed-theme-caption">{{ t("mode") }}</span>
+              <button type="button" class="mode-dot is-active" data-theme="dark" title="Dark mode">●</button>
+              <button type="button" class="mode-dot" data-theme="light" title="Light mode">○</button>
+            </div>
+            <div class="feed-theme-group">
+              <span class="feed-theme-caption">{{ t('language') }}:</span>
+              <select id="lang-select-compose" style="padding:0.3rem 0.6rem; border-radius:12px; border:1px solid var(--feed-border-soft); background:rgba(0,0,0,0.10); color:inherit;">
+                <option value="pl" {{ "selected" if (lang or ui_lang)=="pl" else "" }}>Polski</option>
+                <option value="en" {{ "selected" if (lang or ui_lang)=="en" else "" }}>English</option>
+                <option value="de" {{ "selected" if (lang or ui_lang)=="de" else "" }}>Deutsch</option>
+                <option value="es" {{ "selected" if (lang or ui_lang)=="es" else "" }}>Español</option>
+                <option value="fr" {{ "selected" if (lang or ui_lang)=="fr" else "" }}>Français</option>
+                <option value="it" {{ "selected" if (lang or ui_lang)=="it" else "" }}>Italiano</option>
+                <option value="nl" {{ "selected" if (lang or ui_lang)=="nl" else "" }}>Nederlands</option>
+                <option value="pt" {{ "selected" if (lang or ui_lang)=="pt" else "" }}>Português</option>
+                <option value="la" {{ "selected" if (lang or ui_lang)=="la" else "" }}>Latina</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="feed-filters-row">
+            <!-- {{ t('select_all') }} -->
+            <label class="feed-pill feed-pill-strong">
+              <input type="checkbox" id="select-all">
+              <span>{{ t('select_all') }}</span>
+            </label>
+
+            <!-- Lista preferencji -->
+            {% for c in communities %}
+              <label class="feed-pill">
+                <input
+                  type="checkbox"
+                  name="c"
+                  value="{{ c.id }}"
+                  {% if not selected or c.id in selected %}checked{% endif %}
+                >
+                <span>{{ c.name }}</span>
+              </label>
+            {% endfor %}
+          </div>
+
+          <button type="submit">{{ t("apply") }}</button>
+          {% if me %}
+            <div style="margin-top:0.55rem; font-size:0.82rem; opacity:0.75;">
+              {{ t("apply_note") }}
+            </div>
+          {% endif %}
+        </fieldset>
+      </form>
+
+      {% if me %}
+      <div class="feed-compose">
+        <form method="post" action="{{ url_for('feed.feed_create_route') }}" id="compose-form">
+          <input type="hidden" name="mode" value="{{ mode }}">
+          <input type="hidden" name="palette" id="compose-palette" value="{{ palette or 'neo' }}">
+          <input type="hidden" name="theme" id="compose-theme" value="{{ theme or 'dark' }}">
+          <input type="hidden" name="attachments_json" id="attachments-json" value="[]">
+          <div style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:0.7rem;">
+            <div style="opacity:0.9; font-weight:600;">{{ t('new_post') }}</div>
+            <div style="font-size:0.85rem; opacity:0.75;">{{ t('logged_in') }} {{ me }}</div>
+            <div class="feed-theme-group">
+              <span class="feed-theme-caption">{{ t('language') }}:</span>
+              <select id="lang-select" style="padding:0.3rem 0.6rem; border-radius:12px; border:1px solid var(--feed-border-soft); background:rgba(0,0,0,0.10); color:inherit;">
+                <option value="pl" {{ "selected" if (lang or ui_lang)=="pl" else "" }}>Polski</option>
+                <option value="en" {{ "selected" if (lang or ui_lang)=="en" else "" }}>English</option>
+                <option value="de" {{ "selected" if (lang or ui_lang)=="de" else "" }}>Deutsch</option>
+                <option value="es" {{ "selected" if (lang or ui_lang)=="es" else "" }}>Español</option>
+                <option value="fr" {{ "selected" if (lang or ui_lang)=="fr" else "" }}>Français</option>
+                <option value="it" {{ "selected" if (lang or ui_lang)=="it" else "" }}>Italiano</option>
+                <option value="nl" {{ "selected" if (lang or ui_lang)=="nl" else "" }}>Nederlands</option>
+                <option value="pt" {{ "selected" if (lang or ui_lang)=="pt" else "" }}>Português</option>
+                <option value="la" {{ "selected" if (lang or ui_lang)=="la" else "" }}>Latina</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; margin-bottom:0.7rem;">
+            <label style="font-size:0.9rem; opacity:0.85;">{{ t('community') }}</label>
+            <select name="community" required style="padding:0.55rem 0.75rem; border-radius:14px; border:1px solid var(--feed-border-soft); background:rgba(0,0,0,0.12); color:inherit;">
+              {% for c in communities %}
+                <option value="{{ c.id }}" {% if selected and c.id in selected %}selected{% endif %}>{{ c.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" style="margin-left:auto; padding:0.55rem 1.1rem; border-radius:999px; border:1px solid rgba(0,0,0,0.25); background: var(--feed-accent); color:#111; font-weight:700; cursor:pointer;">{{ t('publish') }}</button>
+          </div>
+
+          <div style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; margin:0.2rem 0 0.6rem;">
+            <label style="font-size:0.9rem; opacity:0.85;">{{ t('attachment') }}</label>
+            <input type="file" id="attach-file" style="max-width:100%;">
+            <button type="button" id="attach-btn" style="padding:0.45rem 0.9rem; border-radius:999px; border:1px solid var(--feed-border-soft); background:rgba(0,0,0,0.12); color:inherit; cursor:pointer;">{{ t("add") }}</button>
+            <span id="attach-status" style="font-size:0.85rem; opacity:0.75;"></span>
+          </div>
+          <div id="attachments-list" style="margin-bottom:0.6rem; font-size:0.86rem; opacity:0.9;"></div>
+
+          <textarea name="text" placeholder="{{ t("write_something") }}" required></textarea>
+          <div style="margin-top:0.6rem; font-size:0.82rem; opacity:0.75;">
+            {{ t("post_manifest_note") }}
+          </div>
+        </form>
+      </div>
+      {% else %}
+      <div class="feed-compose" style="opacity:0.9;">
+        <div style="font-weight:600; margin-bottom:0.4rem;">{{ t("want_publish") }}</div>
+        <div style="opacity:0.8;">{{ t("login_to_post") }}</div>
+      </div>
+      {% endif %}
+
+      <!-- Lista postów -->
+      {% if posts %}
+        {% for post in posts %}
+          <article class="feed-post">
+            <div class="feed-post-header">
+              <span class="feed-post-author">{{ post.author }}</span>
+              {% if post.verified %}
+                <span class="verified-badge">✓ {{ t("verified") }}</span>
+              {% endif %}
+              <span class="feed-post-meta">· {{ post.minutes_ago }} {{ t("minutes_ago") }}</span>
+              <span class="feed-post-community">{{ post.community }}</span>
+            </div>
+            <div class="feed-post-text">
+              {{ post.text }}
+            </div>
+            {% if post.attachments and post.attachments|length > 0 %}
+              <div style="margin-top:0.55rem; font-size:0.82rem; opacity:0.85;">
+                <b>{{ t('attachments') }}:</b>
+                <ul style="margin:0.35rem 0 0 1.1rem; padding:0;">
+                  {% for a in post.attachments %}
+                    <li style="margin:0.15rem 0;">
+                      {{ a.filename }} · {{ a.mime }} · {{ a.size }} B · {{ a.chunks|length }} chunks
+                    </li>
+                  {% endfor %}
+                </ul>
+              </div>
+            {% endif %}
+          </article>
+        {% endfor %}
+      {% else %}
+        <p>{{ t('no_posts') }}</p>
+      {% endif %}
+    {% endif %}
+
+  </div>
+
+  {% if mode %}
+  <!-- Skrypt do obsługi "{{ t('select_all') }}" + palet + dark/light -->
+  <script>
+    const selectAll = document.getElementById("select-all");
+    const checkboxes = document.querySelectorAll("input[type='checkbox'][name='c']");
+    const wrapper = document.querySelector(".feed-wrapper");
+
+    const paletteButtons = document.querySelectorAll(".palette-swatch");
+    const modeButtons = document.querySelectorAll(".mode-dot");
+
+    const paletteField = document.getElementById("palette-field");
+    const themeField = document.getElementById("theme-field");
+    const composePalette = document.getElementById("compose-palette");
+    const composeTheme = document.getElementById("compose-theme");
+    const prefsForm = document.getElementById("prefs-form");
+    const me = "{{ me or '' }}";
+
+    // "{{ t('select_all') }}"
+    if (selectAll) {
+      selectAll.addEventListener("change", () => {
+        checkboxes.forEach(cb => cb.checked = selectAll.checked);
+      });
+
+      checkboxes.forEach(cb => {
+        cb.addEventListener("change", () => {
+          const allChecked = Array.from(checkboxes).every(c => c.checked);
+          selectAll.checked = allChecked;
+        });
+      });
+
+      window.addEventListener("DOMContentLoaded", () => {
+        const allChecked = Array.from(checkboxes).every(c => c.checked);
+        selectAll.checked = allChecked;
+      });
+    }
+
+    // Inicjalizacja aktywnych przycisków z atrybutów wrappera
+    window.addEventListener("DOMContentLoaded", () => {
+      const initialPalette = wrapper.getAttribute("data-palette") || "neo";
+      const initialTheme = wrapper.getAttribute("data-theme") || "dark";
+
+      paletteButtons.forEach(b => b.classList.toggle("is-active", (b.dataset.palette || "neo") === initialPalette));
+      modeButtons.forEach(b => b.classList.toggle("is-active", (b.dataset.theme || "dark") === initialTheme));
+
+      if (paletteField) paletteField.value = initialPalette;
+      if (themeField) themeField.value = initialTheme;
+      if (composePalette) composePalette.value = initialPalette;
+      if (composeTheme) composeTheme.value = initialTheme;
+    });
+
+    // Palety kolorów – zmiana data-palette na wrapperze + aktualizacja hidden input
+    paletteButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const palette = btn.dataset.palette || "neo";
+        wrapper.setAttribute("data-palette", palette);
+        paletteButtons.forEach(b => b.classList.toggle("is-active", b === btn));
+        if (paletteField) paletteField.value = palette;
+        if (composePalette) composePalette.value = palette;
+      });
+    });
+
+    // Dark / Light mode – zmiana data-theme + aktualizacja hidden input
+    modeButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const theme = btn.dataset.theme || "dark";
+        wrapper.setAttribute("data-theme", theme);
+        modeButtons.forEach(b => b.classList.toggle("is-active", b === btn));
+        if (themeField) themeField.value = theme;
+        if (composeTheme) composeTheme.value = theme;
+      });
+    });
+
+    
+    // Toggle preferences panel
+    const toggleBtn = document.getElementById("toggle-prefs");
+    if (toggleBtn && prefsForm) {
+      const hasExplicitSelection = Array.from(document.querySelectorAll("input[name='c']")).some(cb=>!cb.checked);
+      if (!hasExplicitSelection && {{ 'true' if selected else 'false' }}) { prefsForm.style.display = 'none'; }
+      toggleBtn.addEventListener('click', ()=>{
+        prefsForm.style.display = (prefsForm.style.display === 'none') ? 'block' : 'none';
+      });
+    }
+
+    // Language selector wiring
+    const langSelect = document.getElementById('lang-select');
+    const langSelectCompose = document.getElementById('lang-select-compose');
+    const langField = document.getElementById('lang-field');
+    if (langField){
+      const bindLang = (sel)=>{
+        if(!sel) return;
+        sel.addEventListener('change', ()=>{
+          langField.value = sel.value;
+          // persist via URL and reload to apply template translations
+          const u = new URL(window.location.href);
+          u.searchParams.set('lang', sel.value);
+          window.location.href = u.toString();
+        });
+      };
+      bindLang(langSelect);
+      bindLang(langSelectCompose);
+    }
+
+    // Zapis preferencji do profilu przy "{{ t('apply') }}" (best-effort)
+    if (prefsForm && me) {
+      let _saving = false;
+      prefsForm.addEventListener("submit", (e) => {
+        if (_saving) return;
+        _saving = true;
+        e.preventDefault();
+
+        const topics = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+        const payload = {
+          mode: "{{ mode }}",
+          lang: (langField? langField.value : ("{{ lang or ui_lang }}")),
+          topics,
+          palette: wrapper.getAttribute("data-palette") || (paletteField ? paletteField.value : "neo"),
+          theme: wrapper.getAttribute("data-theme") || (themeField ? themeField.value : "dark"),
+        };
+
+        fetch("{{ url_for('account_routes.account_preferences_route') }}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          keepalive: true,
+        }).catch(() => {}).finally(() => {
+          prefsForm.submit();
+        });
+      });
+    }
+
+    // Załączniki do posta (chunking -> blobstore -> lista chunks)
+    const attachFile = document.getElementById("attach-file");
+    const attachBtn = document.getElementById("attach-btn");
+    const attachStatus = document.getElementById("attach-status");
+    const attachmentsList = document.getElementById("attachments-list");
+    const attachmentsJson = document.getElementById("attachments-json");
+
+    function renderAttachments(arr) {
+      if (!attachmentsList) return;
+      if (!arr.length) {
+        attachmentsList.innerHTML = "";
+        return;
+      }
+      const rows = arr.map((a, idx) => {
+        const name = (a && a.filename) ? a.filename : "plik";
+        const chunks = (a && a.chunks) ? a.chunks.length : 0;
+        return `<div style="display:flex; gap:0.6rem; align-items:center; margin:0.25rem 0;">
+          <span>• ${name} <span style="opacity:0.75">(${chunks} chunks)</span></span>
+          <button type="button" data-idx="${idx}" class="remove-attach" style="margin-left:auto; padding:0.2rem 0.55rem; border-radius:999px; border:1px solid var(--feed-border-soft); background:rgba(0,0,0,0.10); color:inherit; cursor:pointer;">Usuń</button>
+        </div>`;
+      }).join("");
+      attachmentsList.innerHTML = rows;
+
+      attachmentsList.querySelectorAll(".remove-attach").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const idx = parseInt(btn.dataset.idx || "-1", 10);
+          if (idx >= 0) {
+            arr.splice(idx, 1);
+            if (attachmentsJson) attachmentsJson.value = JSON.stringify(arr);
+            renderAttachments(arr);
+          }
+        });
+      });
+    }
+
+    if (attachBtn && attachFile && attachmentsJson) {
+      let current = [];
+      try { current = JSON.parse(attachmentsJson.value || "[]") || []; } catch { current = []; }
+      renderAttachments(current);
+
+      attachBtn.addEventListener("click", async () => {
+        const f = attachFile.files && attachFile.files[0];
+        if (!f) {
+          if (attachStatus) attachStatus.textContent = window.MA_I18N.choose_file;
+          return;
+        }
+        if (attachStatus) attachStatus.textContent = "Chunkuję i zapisuję…";
+        attachBtn.disabled = true;
+
+        const fd = new FormData();
+        fd.append("file", f);
+        fd.append("chunk_size", String(1024 * 1024));
+
+        try {
+          const resp = await fetch("{{ url_for('feed.feed_attach_route') }}", { method: "POST", body: fd });
+          const data = await resp.json();
+          if (!data.ok) {
+            throw new Error(data.error || "upload_failed");
+          }
+          current.push(data.attachment);
+          attachmentsJson.value = JSON.stringify(current);
+          renderAttachments(current);
+          attachFile.value = "";
+          if (attachStatus) attachStatus.textContent = "Dodano.";
+        } catch (e) {
+          if (attachStatus) attachStatus.textContent = "Błąd: nie udało się dodać.";
+        } finally {
+          attachBtn.disabled = false;
+          setTimeout(() => { if (attachStatus) attachStatus.textContent = ""; }, 2000);
+        }
+      });
+    }
+  </script>
+  {% endif %}
+
+  <script>
+    async function poolPing(){
+      try{ await fetch('/api/pool/ping', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}); }catch(e){}
+    }
+    async function workerTick(){
+      try{ await fetch('/api/compute/worker/tick', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}); }catch(e){}
+    }
+    {% if me %}
+      poolPing();
+      setInterval(poolPing, 60*1000);
+      {% if contrib and (contrib.slider_pos|int) > 0 %}
+        workerTick();
+        setInterval(workerTick, 10*1000);
+      {% endif %}
+    {% endif %}
+  </script>
+</body>
+</html>
