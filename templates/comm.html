@@ -124,7 +124,7 @@
 
       {% if active_peer %}
         <div style="margin-top:10px">
-          <form method="post" action="{{ url_for('comm_send_money') }}" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end">
+          <form method="post" action="{{ url_for('comm_routes.comm_send_money_route') }}" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end">
             <input type="hidden" name="peer" value="{{ active_peer }}" />
             <div>
               <label>{{ t('comm_amount') }}</label>

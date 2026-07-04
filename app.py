@@ -2199,6 +2199,264 @@ def api_account_keys_rotate():
     return jsonify({"ok": True, "new_pub_pem": new_pub_pem, "archived_dir": info.get("archived_dir")})
 
 
+# --- Comm (E2E messenger) legacy views — resurrected 2026-07-04 from ma47 ---
+# Routes lived in app.py until ma47; ma48_patched truncated app.py (-853 lines)
+# and the /comm routes were never re-extracted into a blueprint. Donor: ma47
+# app.py lines 2950-3334. Served via routes/comm.py + services/comm_service.py.
+
+@require_login
+def comm():
+    me = current_user()
+    palette = (request.args.get("palette") or "").strip()
+    theme = (request.args.get("theme") or "").strip()
+    lang = (request.args.get("lang") or "").strip()
+    ping_enabled = False
+    if me:
+        try:
+            uid = current_user_id()
+            st = get_contrib_settings(BASE_DIR, uid)
+            slider = int(st.get("slider_pos") or 0)
+            fields = list_storage_fields(BASE_DIR, uid)
+            storage_active = any(f.get("status") in ("ACTIVE", "MATURE") for f in fields)
+            ping_enabled = (slider > 0) or storage_active
+        except Exception:
+            ping_enabled = False
+    users = list_usernames(BASE_DIR)
+    # ensure keys/accounts exist for all users
+    ensure_user_records(users)
+    others = [u for u in users if u != me]
+
+    # Inbox: list conversations + unread counts
+    conversations = list_conversations(BASE_DIR, me)
+    peer = (request.args.get("with") or "").strip()
+    if not peer and conversations:
+        peer = conversations[0]["peer"]
+    if peer and peer not in others:
+        peer = ""
+
+    thread = []
+    if peer:
+        thread = fetch_thread(BASE_DIR, me, peer, limit=50)
+        mark_thread_read(BASE_DIR, me, peer)
+
+    # Apply saved UI prefs if not explicitly provided.
+    try:
+        user = get_user_by_username(BASE_DIR, me) or {}
+        prefs = get_user_preferences(BASE_DIR, int(user.get("id") or 0))
+        if not palette:
+            palette = (prefs.get("palette") or "").strip()
+        if not theme:
+            theme = (prefs.get("theme") or "").strip()
+        if not lang:
+            lang = (prefs.get("lang") or "").strip()
+    except Exception:
+        pass
+
+    if not palette:
+        palette = "neo"
+    if theme not in ("dark", "light"):
+        theme = "dark"
+    if lang not in LANGS:
+        lang = getattr(g, "ui_lang", "pl")
+
+    return render_template(
+        "comm.html",
+        me=me,
+        palette=palette,
+        theme=theme,
+        lang=lang,
+        ping_enabled=ping_enabled,
+        users=others,
+        conversations=conversations,
+        active_peer=peer,
+        thread=thread,
+    )
+
+
+@require_login
+def comm_send_money():
+    """Send a wallet transaction directly from a comm thread (prototype)."""
+    me = current_user() or ""
+    peer = (request.form.get("peer") or "").strip()
+    amount_raw = (request.form.get("amount") or "0").strip()
+    description = (request.form.get("description") or "").strip()
+
+    try:
+        amount = float(amount_raw)
+    except ValueError:
+        amount = 0.0
+
+    if not me or not peer:
+        flash("Brak odbiorcy.")
+        return redirect(url_for("comm_routes.comm_route", **{"with": peer}))
+
+    # reuse wallet pipeline
+    state = load_state()
+    tx = {
+        "id": str(uuid.uuid4()),
+        "sender": me,
+        "receiver": peer,
+        "amount": amount,
+        "description": description,
+        "timestamp": time.time(),
+    }
+
+    decision, _verdicts = evaluate_transaction(tx, state)
+    if not decision.get("allowed"):
+        flash("Horyzont: transakcja zablokowana.")
+        return redirect(url_for("comm_routes.comm_route", **{"with": peer}))
+
+    firmware_meta = None
+    if SIGNER_MODE == 'FIRMWARE':
+        state.setdefault("meta", {}).setdefault("sign_counters", {})
+        last = int(state["meta"]["sign_counters"].get(me, 0))
+        nxt = last + 1
+        state["meta"]["sign_counters"][me] = nxt
+        firmware_meta = {"counter": nxt}
+        tx_sig_b64 = sign_transaction_via_firmware(tx, me, meta=firmware_meta).get('tx_sig_b64')
+    else:
+        tx_sig_b64 = sign_transaction(tx, me)
+
+    horizon_receipt = sign_horizon_receipt(tx, Path(HORIZON_MASTER_KEYS_DIR))
+    signature = tx_sig_b64
+    state = apply_transaction(state, tx, decision, signature)
+
+    # also write a thread event so money moves are visible in the conversation
+    try:
+        event_text = f"💠 {me} → {peer} · {amount} LC" + (f" · {description}" if description else "")
+        sender_kp = ensure_comm_keypair(me, Path(COMM_KEYS_DIR))
+        receiver_kp = ensure_comm_keypair(peer, Path(COMM_KEYS_DIR))
+        msg_id = str(uuid.uuid4())
+        ts = time.time()
+        aad = f"{me}->{peer}|{msg_id}|{ts}|LC".encode("utf-8")
+        ct, nonce, salt = encrypt_for_pair(sender_kp.private_key, receiver_kp.public_key, event_text.encode("utf-8"), aad)
+        insert_message(
+            BASE_DIR,
+            {
+                "id": msg_id,
+                "sender": me,
+                "receiver": peer,
+                "timestamp": ts,
+                "ciphertext_b64": _b64e(ct),
+                "nonce_b64": _b64e(nonce),
+                "salt_b64": _b64e(salt),
+                "aad_b64": _b64e(aad),
+                "v": 2,
+            },
+        )
+    except Exception:
+        # never block money send on a UI event
+        pass
+
+    flash(f"Wysłano {amount} LC do {peer}.")
+    return redirect(url_for("comm_routes.comm_route", **{"with": peer}))
+
+
+@require_login
+def comm_api_send():
+    payload = request.get_json(silent=True) or request.form
+    sender = (current_user() or "Neo").strip()
+    receiver = (payload.get("receiver") or "").strip()
+    text = (payload.get("body") or payload.get("text") or "").strip()
+
+    if not receiver:
+        return jsonify({"ok": False, "error": "missing_receiver"}), 400
+    if receiver == sender:
+        return jsonify({"ok": False, "error": "cannot_message_self"}), 400
+
+    # ensure user registry + keys
+    ensure_user_records([sender, receiver])
+
+    # Horyzont (minimal) – guards based on metadata/rate (no opinions)
+    rate = load_comm_rate()
+    decision, rate = evaluate_message(sender, receiver, text, rate)
+    save_comm_rate(rate)
+    if decision.status != "ALLOWED":
+        return jsonify({"ok": False, "error": decision.reason, "meta": decision.meta}), 400
+
+    # crypto: X25519 -> shared -> HKDF -> AES-GCM
+    sender_kp = ensure_comm_keypair(sender, Path(COMM_KEYS_DIR))
+    receiver_kp = ensure_comm_keypair(receiver, Path(COMM_KEYS_DIR))
+
+    msg_id = str(uuid.uuid4())
+    ts = time.time()
+    aad = f"{sender}->{receiver}|{msg_id}|{ts}".encode("utf-8")
+    ct, nonce, salt = encrypt_for_pair(sender_kp.private_key, receiver_kp.public_key, text.encode("utf-8"), aad)
+
+    insert_message(
+        BASE_DIR,
+        {
+            "id": msg_id,
+            "sender": sender,
+            "receiver": receiver,
+            "timestamp": ts,
+            "ciphertext_b64": _b64e(ct),
+            "nonce_b64": _b64e(nonce),
+            "salt_b64": _b64e(salt),
+            "aad_b64": _b64e(aad),
+            "v": 1,
+        },
+    )
+
+    # return last 50 decrypted for UI convenience
+    return comm_api_thread(f"{sender}__{receiver}")
+
+
+@require_login
+def comm_api_thread(key):
+    # key is URL-encoded 'A__B' from the UI
+    raw = key.replace('%2F', '/')
+    if '__' in raw:
+        a, b = raw.split('__', 1)
+    else:
+        a, b = (current_user() or 'Neo'), 'Lira'
+    a = (a or (current_user() or 'Neo')).strip(); b = (b or 'Lira').strip()
+
+    ensure_user_records([a, b])
+
+    k = '::'.join(sorted([a, b], key=str.lower))
+    thread = fetch_thread(BASE_DIR, a, b, limit=50)
+
+    # decrypt only for the pair (local prototype)
+    a_kp = ensure_comm_keypair(a, Path(COMM_KEYS_DIR))
+    b_kp = ensure_comm_keypair(b, Path(COMM_KEYS_DIR))
+
+    out = []
+    for m in thread:
+        body = None
+        # backward compatibility: plaintext
+        if "body" in m:
+            body = m.get("body")
+        else:
+            try:
+                aad = _b64d(m.get("aad_b64", ""))
+                ct = _b64d(m.get("ciphertext_b64", ""))
+                nonce = _b64d(m.get("nonce_b64", ""))
+                salt = _b64d(m.get("salt_b64", ""))
+                sender = m.get("sender")
+                receiver = m.get("receiver")
+
+                if sender == a and receiver == b:
+                    body = decrypt_for_pair(b_kp.private_key, a_kp.public_key, ct, nonce, salt, aad).decode("utf-8", errors="replace")
+                elif sender == b and receiver == a:
+                    body = decrypt_for_pair(a_kp.private_key, b_kp.public_key, ct, nonce, salt, aad).decode("utf-8", errors="replace")
+                else:
+                    body = "[encrypted]"
+            except Exception:
+                body = "[decrypt_error]"
+
+        out.append({
+            "id": m.get("msg_id") or m.get("id"),
+            "sender": m.get("sender"),
+            "receiver": m.get("receiver"),
+            "timestamp": m.get("ts") or m.get("timestamp") or 0,
+            "body": body,
+            "encrypted": bool(m.get("ciphertext_b64")),
+        })
+
+    return jsonify({'thread_key': k, 'messages': out})
+
+
 # --- Route blueprints (progressive app.py decomposition) ---
 from routes.compute import compute_bp
 from routes.auth import auth_bp
@@ -2206,12 +2464,14 @@ from routes.feed import feed_bp
 from routes.account import account_bp
 from routes.market_storage import market_storage_bp
 from routes.system import system_bp
+from routes.comm import comm_bp
 app.register_blueprint(compute_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(feed_bp)
 app.register_blueprint(account_bp)
 app.register_blueprint(market_storage_bp)
 app.register_blueprint(system_bp)
+app.register_blueprint(comm_bp)
 
 
 if __name__ == "__main__":
