@@ -36,9 +36,11 @@ from db import connect, get_user_by_username
 # --- Neo's bulk_only rule --------------------------------------------------
 # If a per-unit price is lower than the transport cost, we require the
 # order to hit a minimum multiple of transport cost — otherwise transport
-# eats the margin. Configurable via env; default 25 PLN transport, 5x cushion
-# (so target minimum order value = 125 PLN for a low-value SKU).
-TRANSPORT_COST_PLN = float(os.getenv("MA_TRANSPORT_COST_PLN", "25.0"))
+# eats the margin. Configurable via env; default 30 PLN transport (Neo,
+# 2026-07-05), 5x cushion (so target minimum order value = 150 PLN for a
+# low-value SKU). Future refinement: compute from Rawpol's weight/zone
+# shipping price list instead of a flat rate.
+TRANSPORT_COST_PLN = float(os.getenv("MA_TRANSPORT_COST_PLN", "30.0"))
 BULK_ONLY_MULTIPLIER = 5
 
 

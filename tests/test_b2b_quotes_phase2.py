@@ -181,9 +181,13 @@ def test_list_quotes_requires_auth(tmp_path):
 # --- 4. Neo's bulk_only rule ----------------------------------------------
 
 def test_create_quote_rejects_below_transport_below_bulk(tmp_path):
+    import math
+    from services import b2b_quote_service as svc
     app_mod = _load_app(tmp_path)
     buyer, _, _ = _make_three_clients(app_mod)
-    # 5 PLN * qty 2 = 10 PLN. transport=25, need 125. Should fail.
+    # 5 PLN * qty 2 = 10 PLN < 5x transport. Should fail with computed min_qty.
+    target = svc.BULK_ONLY_MULTIPLIER * svc.TRANSPORT_COST_PLN
+    expected_min_qty = int(math.ceil(target / 5.0))
     resp = buyer.post(
         "/api/quotes/create",
         json={
@@ -195,18 +199,22 @@ def test_create_quote_rejects_below_transport_below_bulk(tmp_path):
     err = resp.get_json()["error"]
     assert err.startswith("bulk_only:"), err
     assert "CHEAP-1" in err
-    assert "min_qty=25" in err  # ceil(125/5) = 25
+    assert f"min_qty={expected_min_qty}" in err
 
 
 def test_create_quote_accepts_bulk_over_threshold(tmp_path):
+    import math
+    from services import b2b_quote_service as svc
     app_mod = _load_app(tmp_path)
     buyer, _, _ = _make_three_clients(app_mod)
-    # 5 PLN * 25 = 125 PLN >= 125. Should pass.
+    # exactly min_qty at 5 PLN reaches the 5x-transport target. Should pass.
+    target = svc.BULK_ONLY_MULTIPLIER * svc.TRANSPORT_COST_PLN
+    min_qty = int(math.ceil(target / 5.0))
     resp = buyer.post(
         "/api/quotes/create",
         json={
             "seller_username": "seller1",
-            "items": [{"sku": "CHEAP-1", "name": "gwozdz", "qty": 25, "unit_price_net": 5.0}],
+            "items": [{"sku": "CHEAP-1", "name": "gwozdz", "qty": min_qty, "unit_price_net": 5.0}],
         },
     )
     assert resp.status_code == 201, resp.get_data(as_text=True)
@@ -242,13 +250,14 @@ def test_price_below_transport_rejected(tmp_path):
 
 
 def test_price_at_or_above_transport_ok(tmp_path):
+    from services import b2b_quote_service as svc
     app_mod = _load_app(tmp_path)
     buyer, seller, _ = _make_three_clients(app_mod)
     quote_id = _create_quote(buyer)
 
     resp = seller.post(
         f"/api/quotes/{quote_id}/respond",
-        json={"action": "price", "total_net": 25.0},
+        json={"action": "price", "total_net": svc.TRANSPORT_COST_PLN},
     )
     assert resp.status_code == 200, resp.get_data(as_text=True)
 
