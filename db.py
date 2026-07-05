@@ -290,6 +290,16 @@ def init_db(base_dir: str) -> None:
         },
     )
 
+    # B2B Phase 2: allow scoping E2E messages to a specific quote_id.
+    # Nullable so legacy comm chat rows keep working with NULL thread_ref.
+    _ensure_table_columns(
+        conn,
+        table="messages",
+        columns={
+            "thread_ref": "TEXT",
+        },
+    )
+
     conn.commit()
 
     # bootstrap demo users if DB is empty
@@ -359,12 +369,17 @@ def list_usernames(base_dir: str) -> List[str]:
 
 
 def insert_message(base_dir: str, m: Dict[str, Any]) -> None:
+    """Insert an encrypted message row.
+
+    Optional key `thread_ref` (str|None): scopes the row to a logical thread
+    (e.g. a B2B quote_id). NULL = legacy pair-only chat, unchanged behavior.
+    """
     conn = connect(base_dir)
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO messages(msg_id, sender, receiver, ts, ciphertext_b64, nonce_b64, salt_b64, aad_b64, receiver_read, v)
-        VALUES(?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO messages(msg_id, sender, receiver, ts, ciphertext_b64, nonce_b64, salt_b64, aad_b64, receiver_read, v, thread_ref)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             m.get("id"),
@@ -377,25 +392,43 @@ def insert_message(base_dir: str, m: Dict[str, Any]) -> None:
             m.get("aad_b64"),
             int(m.get("receiver_read") or 0),
             int(m.get("v") or 1),
+            m.get("thread_ref"),
         ),
     )
     conn.commit()
     conn.close()
 
 
-def fetch_thread(base_dir: str, a: str, b: str, limit: int = 50) -> List[Dict[str, Any]]:
-    # fetch both directions
+def fetch_thread(base_dir: str, a: str, b: str, limit: int = 50, thread_ref: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Fetch messages between two users, both directions.
+
+    If `thread_ref` is provided (e.g. a B2B quote_id), the result is filtered
+    to messages tagged with that ref. When None (default), behaves exactly as
+    before — no filter — so the comm UI keeps its existing view.
+    """
     conn = connect(base_dir)
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT * FROM messages
-        WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)
-        ORDER BY ts DESC
-        LIMIT ?
-        """,
-        (a, b, b, a, int(limit)),
-    )
+    if thread_ref is None:
+        cur.execute(
+            """
+            SELECT * FROM messages
+            WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)
+            ORDER BY ts DESC
+            LIMIT ?
+            """,
+            (a, b, b, a, int(limit)),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT * FROM messages
+            WHERE ((sender=? AND receiver=?) OR (sender=? AND receiver=?))
+              AND thread_ref=?
+            ORDER BY ts DESC
+            LIMIT ?
+            """,
+            (a, b, b, a, str(thread_ref), int(limit)),
+        )
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return list(reversed(rows))

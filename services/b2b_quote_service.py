@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import os
 import time
 import uuid
 from pathlib import Path
@@ -29,6 +31,15 @@ from typing import Any, Dict, List, Optional
 
 from core.event_chain import append_event
 from db import connect, get_user_by_username
+
+
+# --- Neo's bulk_only rule --------------------------------------------------
+# If a per-unit price is lower than the transport cost, we require the
+# order to hit a minimum multiple of transport cost — otherwise transport
+# eats the margin. Configurable via env; default 25 PLN transport, 5x cushion
+# (so target minimum order value = 125 PLN for a low-value SKU).
+TRANSPORT_COST_PLN = float(os.getenv("MA_TRANSPORT_COST_PLN", "25.0"))
+BULK_ONLY_MULTIPLIER = 5
 
 
 # --- paths -----------------------------------------------------------------
@@ -179,6 +190,33 @@ def _row_to_dict(row) -> Dict[str, Any]:
     return d
 
 
+def _enforce_bulk_only(items: List[Dict[str, Any]]) -> None:
+    """Neo's rule: if unit_price_net is set AND < transport, require bulk.
+
+    Items without unit_price_net (open inquiry — buyer asks for a price)
+    are NOT checked here; the transport-cost floor is enforced later on
+    the seller's price action via `respond_quote`.
+    """
+    threshold = TRANSPORT_COST_PLN
+    target = BULK_ONLY_MULTIPLIER * TRANSPORT_COST_PLN
+    for it in items:
+        price = it.get("unit_price_net")
+        if price is None:
+            continue
+        try:
+            price_f = float(price)
+        except Exception:
+            continue
+        if price_f <= 0 or price_f >= threshold:
+            continue
+        qty = int(it.get("qty") or 0)
+        if qty * price_f >= target:
+            continue
+        ident = it.get("sku") or it.get("listing_id") or "?"
+        min_qty = int(math.ceil(target / price_f))
+        raise ValueError(f"bulk_only:{ident}:min_qty={min_qty}")
+
+
 def _effective_status(row: Dict[str, Any], now: float | None = None) -> str:
     now = now if now is not None else time.time()
     status = str(row.get("status") or "")
@@ -206,6 +244,7 @@ def create_quote(
         raise ValueError("cannot_quote_self")
 
     norm_items = _normalize_items(items)
+    _enforce_bulk_only(norm_items)
     quote_id = uuid.uuid4().hex
     now = time.time()
     note_str = (note or "").strip()
@@ -300,6 +339,10 @@ def respond_quote(
             raise ValueError("bad_total_net")
         if total_net_f < 0:
             raise ValueError("bad_total_net")
+        # Neo's floor: an offer priced below transport cost is never worth
+        # sending as a B2B order.
+        if total_net_f < TRANSPORT_COST_PLN:
+            raise ValueError("total_below_transport")
         conn = connect(base_dir)
         try:
             cur = conn.cursor()
@@ -344,6 +387,38 @@ def respond_quote(
     return _load_quote_row(base_dir, quote_id) or {}
 
 
+def list_quotes(base_dir: str, user_id: int, limit: int = 100) -> List[Dict[str, Any]]:
+    """Return quotes where user is buyer OR seller, newest first.
+
+    Effective status (EXPIRED for stale SENT rows) is surfaced without
+    mutating the DB row — same read-view convention as `get_quote`.
+    """
+    user_id = int(user_id)
+    if user_id <= 0:
+        return []
+    limit = max(1, min(500, int(limit)))
+    conn = connect(base_dir)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT * FROM b2b_quotes
+               WHERE buyer_user_id=? OR seller_user_id=?
+               ORDER BY created_ts DESC
+               LIMIT ?""",
+            (user_id, user_id, limit),
+        )
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    now = time.time()
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        row = _row_to_dict(r)
+        row["status"] = _effective_status(row, now)
+        out.append(row)
+    return out
+
+
 def get_quote(base_dir: str, *, quote_id: str, actor_user_id: int) -> Dict[str, Any]:
     row = _load_quote_row(base_dir, (quote_id or "").strip())
     if not row:
@@ -384,6 +459,37 @@ def _emit(paths: Dict[str, Path], etype: str, payload: Dict[str, Any]) -> None:
     except Exception:
         # Chain is best-effort for the pilot; SQLite remains truth-of-record.
         pass
+
+
+def get_username_by_id(base_dir: str, user_id: int) -> Optional[str]:
+    """Small helper: user_id -> username, or None. Used by message routes."""
+    try:
+        uid = int(user_id)
+    except Exception:
+        return None
+    if uid <= 0:
+        return None
+    conn = connect(base_dir)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT username FROM users WHERE id=?", (uid,))
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    return str(row["username"]) if row else None
+
+
+def get_quote_participants(base_dir: str, quote_id: str) -> Optional[Dict[str, int]]:
+    """Cheap helper for message endpoints: return {buyer_user_id, seller_user_id}
+    or None if the quote does not exist. Does NOT enforce auth.
+    """
+    row = _load_quote_row(base_dir, (quote_id or "").strip())
+    if not row:
+        return None
+    return {
+        "buyer_user_id": int(row["buyer_user_id"]),
+        "seller_user_id": int(row["seller_user_id"]),
+    }
 
 
 def resolve_seller(base_dir: str, *, seller_user_id: Any = None, seller_username: Any = None) -> Optional[int]:
