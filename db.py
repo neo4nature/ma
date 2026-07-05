@@ -248,6 +248,34 @@ def init_db(base_dir: str) -> None:
         CREATE INDEX IF NOT EXISTS idx_b2b_quotes_buyer_ts ON b2b_quotes(buyer_user_id, created_ts);
         CREATE INDEX IF NOT EXISTS idx_b2b_quotes_seller_ts ON b2b_quotes(seller_user_id, created_ts);
         CREATE INDEX IF NOT EXISTS idx_b2b_quotes_status ON b2b_quotes(status);
+
+        -- B2B Phase 3: offline invoices (one per accepted quote).
+        -- No PDF, no invoice numbering — external_ref stores the number from
+        -- the external invoicing system (e.g. Faktura.pl). Company data stays
+        -- in SQLite; the chain gets amounts/ids only.
+        CREATE TABLE IF NOT EXISTS invoices (
+          invoice_id TEXT PRIMARY KEY,
+          quote_id TEXT NOT NULL UNIQUE,
+          buyer_user_id INTEGER NOT NULL,
+          seller_user_id INTEGER NOT NULL,
+          amount_net REAL NOT NULL,
+          vat_rate REAL NOT NULL,
+          vat_amount REAL NOT NULL,
+          amount_gross REAL NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'PLN',
+          external_ref TEXT,
+          status TEXT NOT NULL CHECK (status IN ('ISSUED','PAID','COMPLETED')),
+          issued_ts REAL NOT NULL,
+          paid_ts REAL,
+          completed_ts REAL,
+          FOREIGN KEY(quote_id) REFERENCES b2b_quotes(quote_id),
+          FOREIGN KEY(buyer_user_id) REFERENCES users(id),
+          FOREIGN KEY(seller_user_id) REFERENCES users(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_invoices_buyer ON invoices(buyer_user_id);
+        CREATE INDEX IF NOT EXISTS idx_invoices_seller ON invoices(seller_user_id);
+        CREATE INDEX IF NOT EXISTS idx_invoices_quote ON invoices(quote_id);
         """
     )
     conn.commit()

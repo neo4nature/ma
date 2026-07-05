@@ -14,6 +14,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request, session
 
 from db import fetch_thread, get_user_by_username, insert_message
+from services import b2b_invoice_service as inv_svc
 from services import b2b_quote_service as svc
 
 
@@ -311,3 +312,119 @@ def b2b_quote_message_thread(quote_id: str):
             "thread_ref": m.get("thread_ref"),
         })
     return jsonify({"ok": True, "quote_id": quote_id, "messages": out})
+
+
+# --- Phase 3: offline invoices ----------------------------------------------
+#
+# Seller issues one invoice per ACCEPTED quote, then confirms the offline
+# payment and completes the order. No PDF, no numbering — `external_ref`
+# stores the number from the external invoicing system as an opaque string.
+
+
+def _invoice_error(e):
+    """Map service exceptions to the same JSON error shape as quote routes."""
+    if isinstance(e, LookupError):
+        return jsonify({"ok": False, "error": str(e)}), 404
+    if isinstance(e, PermissionError):
+        return jsonify({"ok": False, "error": str(e)}), 403
+    return jsonify({"ok": False, "error": str(e)}), 400
+
+
+@b2b_quotes_bp.route("/api/quotes/<quote_id>/invoice", methods=["POST"])
+def b2b_invoice_issue(quote_id: str):
+    uid, _ = _current_user_id()
+    if not uid:
+        return _auth_error()
+    data = request.get_json(silent=True) or {}
+    base_dir, data_dir = _base_and_data_dir()
+
+    vat_rate = data.get("vat_rate")
+    if vat_rate is None:
+        vat_rate = 23.0
+    external_ref = data.get("external_ref")
+    if external_ref is not None:
+        external_ref = str(external_ref).strip()
+        if len(external_ref) > 100:
+            return jsonify({"ok": False, "error": "external_ref_too_long"}), 400
+        external_ref = external_ref or None
+
+    try:
+        invoice = inv_svc.issue_invoice(
+            base_dir,
+            data_dir,
+            quote_id=quote_id,
+            actor_user_id=uid,
+            vat_rate=vat_rate,
+            external_ref=external_ref,
+        )
+    except (LookupError, PermissionError, ValueError) as e:
+        return _invoice_error(e)
+    return jsonify({"ok": True, "invoice": invoice}), 201
+
+
+@b2b_quotes_bp.route("/api/invoices/<invoice_id>/confirm-payment", methods=["POST"])
+def b2b_invoice_confirm_payment(invoice_id: str):
+    uid, _ = _current_user_id()
+    if not uid:
+        return _auth_error()
+    base_dir, data_dir = _base_and_data_dir()
+    try:
+        invoice = inv_svc.confirm_payment(
+            base_dir, data_dir, invoice_id=invoice_id, actor_user_id=uid
+        )
+    except (LookupError, PermissionError, ValueError) as e:
+        return _invoice_error(e)
+    return jsonify({"ok": True, "invoice": invoice})
+
+
+@b2b_quotes_bp.route("/api/invoices/<invoice_id>/complete", methods=["POST"])
+def b2b_invoice_complete(invoice_id: str):
+    uid, _ = _current_user_id()
+    if not uid:
+        return _auth_error()
+    base_dir, data_dir = _base_and_data_dir()
+    try:
+        invoice = inv_svc.complete_order(
+            base_dir, data_dir, invoice_id=invoice_id, actor_user_id=uid
+        )
+    except (LookupError, PermissionError, ValueError) as e:
+        return _invoice_error(e)
+    return jsonify({"ok": True, "invoice": invoice})
+
+
+@b2b_quotes_bp.route("/api/invoices/<invoice_id>", methods=["GET"])
+def b2b_invoice_get(invoice_id: str):
+    uid, _ = _current_user_id()
+    if not uid:
+        return _auth_error()
+    base_dir, _ = _base_and_data_dir()
+    try:
+        invoice = inv_svc.get_invoice(base_dir, invoice_id=invoice_id, actor_user_id=uid)
+    except (LookupError, PermissionError) as e:
+        return _invoice_error(e)
+    return jsonify({"ok": True, "invoice": invoice})
+
+
+@b2b_quotes_bp.route("/api/invoices", methods=["GET"])
+def b2b_invoice_list():
+    """List invoices where current user is buyer OR seller, newest first."""
+    uid, _ = _current_user_id()
+    if not uid:
+        return _auth_error()
+    base_dir, _ = _base_and_data_dir()
+    invoices = inv_svc.list_invoices(base_dir, uid, limit=100)
+    return jsonify({"ok": True, "invoices": invoices})
+
+
+@b2b_quotes_bp.route("/api/quotes/<quote_id>/invoice", methods=["GET"])
+def b2b_invoice_for_quote(quote_id: str):
+    """Invoice for a quote — 200 with invoice=null when not yet issued."""
+    uid, _ = _current_user_id()
+    if not uid:
+        return _auth_error()
+    base_dir, _ = _base_and_data_dir()
+    try:
+        invoice = inv_svc.get_invoice_for_quote(base_dir, quote_id=quote_id, actor_user_id=uid)
+    except (LookupError, PermissionError) as e:
+        return _invoice_error(e)
+    return jsonify({"ok": True, "invoice": invoice})
