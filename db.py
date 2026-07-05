@@ -211,6 +211,43 @@ def init_db(base_dir: str) -> None:
         );
 
         CREATE INDEX IF NOT EXISTS idx_media_jobs_listing_ts ON media_jobs(listing_id, created_ts);
+
+        -- B2B quote (zapytanie ofertowe) flow for Workwear/BHP pilot.
+        -- OFFLINE_INVOICE only. No settlement, no LifeCoin. Personal/company
+        -- data lives here in SQLite; the append-only chain stores process
+        -- truth (ids, statuses, hashes/totals) only.
+        CREATE TABLE IF NOT EXISTS b2b_profiles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL UNIQUE,
+          company_name TEXT,
+          nip TEXT,
+          billing_address TEXT,
+          contact_email TEXT,
+          contact_phone TEXT,
+          created_ts REAL NOT NULL,
+          FOREIGN KEY(user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS b2b_quotes (
+          quote_id TEXT PRIMARY KEY,
+          buyer_user_id INTEGER NOT NULL,
+          seller_user_id INTEGER NOT NULL,
+          items_json TEXT NOT NULL,
+          total_net REAL,
+          currency TEXT NOT NULL DEFAULT 'PLN',
+          status TEXT NOT NULL CHECK (status IN ('DRAFT','SENT','ACCEPTED','REJECTED','EXPIRED')),
+          note TEXT,
+          payment_method TEXT NOT NULL DEFAULT 'OFFLINE_INVOICE',
+          created_ts REAL NOT NULL,
+          updated_ts REAL NOT NULL,
+          expires_ts REAL,
+          FOREIGN KEY(buyer_user_id) REFERENCES users(id),
+          FOREIGN KEY(seller_user_id) REFERENCES users(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_b2b_quotes_buyer_ts ON b2b_quotes(buyer_user_id, created_ts);
+        CREATE INDEX IF NOT EXISTS idx_b2b_quotes_seller_ts ON b2b_quotes(seller_user_id, created_ts);
+        CREATE INDEX IF NOT EXISTS idx_b2b_quotes_status ON b2b_quotes(status);
         """
     )
     conn.commit()
