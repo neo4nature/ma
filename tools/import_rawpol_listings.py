@@ -29,11 +29,15 @@ VALID_TAGS = {
 
 
 def build_title(row: sqlite3.Row) -> str:
+    name = (_col(row, "name") or "").strip()
     brand = (row["brand"] or "").strip()
     symbol = (row["symbol"] or row["variant_base"] or "").strip()
-    parts = [brand]
-    if symbol and symbol.upper() != brand.upper():
-        parts.append(symbol)
+    if name:
+        parts = [name.capitalize() if name.isupper() else name, symbol or brand]
+    else:
+        parts = [brand]
+        if symbol and symbol.upper() != brand.upper():
+            parts.append(symbol)
     color = row["variant_color"]
     size = row["variant_size"]
     if color:
@@ -41,6 +45,13 @@ def build_title(row: sqlite3.Row) -> str:
     if size:
         parts.append(f"rozm. {str(size).strip()}")
     return " ".join(p for p in parts if p) or f"SKU {row['sku']}"
+
+
+def _col(row: sqlite3.Row, key: str):
+    try:
+        return row[key]
+    except IndexError:
+        return None
 
 
 def build_description(row: sqlite3.Row) -> str:
@@ -70,6 +81,8 @@ def main() -> None:
     ap.add_argument("--seller", required=True, help="seller username in MA")
     ap.add_argument("--margin", type=float, default=0.0, help="percent added to price_net")
     ap.add_argument("--execute", action="store_true", help="actually write (default dry-run)")
+    ap.add_argument("--rank-bestsellers", action="store_true",
+                    help="order by kupowanoZ in-degree (requires dynamic_data table) and require availability")
     args = ap.parse_args()
 
     tags = [t.strip() for t in args.categories.split(",") if t.strip()]
@@ -89,13 +102,34 @@ def main() -> None:
     now = time.time()
     inserted = updated = 0
 
+    indegree = {}
+    if args.rank_bestsellers:
+        import json as _json
+        for (kz,) in cat.execute("SELECT kupowano_z FROM dynamic_data WHERE kupowano_z != '[]'"):
+            for ref in _json.loads(kz):
+                indegree[ref.lower()] = indegree.get(ref.lower(), 0) + 1
+        print(f"cross-sell graph: {len(indegree)} SKU z co najmniej 1 wskazaniem")
+
     for tag in tags:
-        rows = cat.execute(
-            """SELECT * FROM products
-               WHERE protection_tag=? AND price_net IS NOT NULL AND price_net > 0
-               ORDER BY price_net DESC LIMIT ?""",
-            (tag, args.limit),
-        ).fetchall()
+        if args.rank_bestsellers:
+            # dynamic_data jest po symbolu rodziny; bierzemy 1 reprezentanta rodziny
+            rows = cat.execute(
+                """SELECT p.* FROM products p
+                   JOIN dynamic_data d ON d.sku = p.symbol
+                   WHERE p.protection_tag=? AND p.price_net IS NOT NULL AND p.price_net > 0
+                     AND (d.stan > 0 OR d.mozna_kupowac = 1)
+                   GROUP BY p.symbol""",
+                (tag,),
+            ).fetchall()
+            rows = sorted(rows, key=lambda r: indegree.get(str(r["symbol"]).lower(), 0), reverse=True)
+            rows = rows[: args.limit]
+        else:
+            rows = cat.execute(
+                """SELECT * FROM products
+                   WHERE protection_tag=? AND price_net IS NOT NULL AND price_net > 0
+                   ORDER BY price_net DESC LIMIT ?""",
+                (tag, args.limit),
+            ).fetchall()
         print(f"[{tag}] {len(rows)} SKU")
         for row in rows:
             listing_id = f"rawpol-{row['sku']}"
