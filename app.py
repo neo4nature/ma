@@ -2466,6 +2466,7 @@ from routes.market_storage import market_storage_bp
 from routes.system import system_bp
 from routes.comm import comm_bp
 from routes.b2b_quotes import b2b_quotes_bp
+from routes.showroom import showroom_bp
 app.register_blueprint(compute_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(feed_bp)
@@ -2474,6 +2475,7 @@ app.register_blueprint(market_storage_bp)
 app.register_blueprint(system_bp)
 app.register_blueprint(comm_bp)
 app.register_blueprint(b2b_quotes_bp)
+app.register_blueprint(showroom_bp)
 
 
 if __name__ == "__main__":

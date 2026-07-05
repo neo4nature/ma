@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="{{ lang or 'pl' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Showroom B2B — Workwear &amp; BHP – MA</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    /* ===== Showroom theme layer — rides on style.css variables ===== */
+    .sr-root {
+      width: 92vw;
+      max-width: 1240px;
+      margin: 0 auto;
+      /* własne zmienne z fallbackami — dark default */
+      --sr-surface: var(--tile-bg, rgba(10, 10, 20, 0.85));
+      --sr-border: var(--tile-border, rgba(255, 255, 255, 0.08));
+      --sr-text: var(--text-main, #f2f2ff);
+      --sr-muted: var(--text-muted, rgba(240, 240, 255, 0.7));
+      --sr-accent: var(--accent-standard, #a78bfa);
+      --sr-input-bg: rgba(255, 255, 255, 0.06);
+      --sr-input-border: rgba(255, 255, 255, 0.16);
+      --sr-chip-bg: rgba(255, 255, 255, 0.07);
+      --sr-overlay: rgba(0, 0, 0, 0.65);
+      --sr-bubble-mine: rgba(167, 139, 250, 0.18);
+      --sr-bubble-theirs: rgba(255, 255, 255, 0.08);
+      --sr-ok: #43d19a;
+      --sr-warn: #ffb84d;
+      --sr-bad: #ff7a7a;
+      --sr-info: #6cb8ff;
+      color: var(--sr-text);
+    }
+    body[data-theme="light"] .sr-root {
+      --sr-input-bg: rgba(0, 0, 0, 0.04);
+      --sr-input-border: rgba(0, 0, 0, 0.18);
+      --sr-chip-bg: rgba(0, 0, 0, 0.05);
+      --sr-overlay: rgba(20, 20, 40, 0.45);
+      --sr-bubble-mine: rgba(120, 90, 220, 0.14);
+      --sr-bubble-theirs: rgba(0, 0, 0, 0.06);
+      --sr-ok: #178a5e;
+      --sr-warn: #a86a00;
+      --sr-bad: #c03535;
+      --sr-info: #1f66b8;
+    }
+
+    .sr-root a { color: var(--sr-accent); }
+    .sr-header { margin-bottom: 1.2rem; }
+    .sr-header h1 { font-size: 1.7rem; margin-bottom: 0.35rem; }
+    .sr-lead { color: var(--sr-muted); max-width: 760px; font-size: 0.95rem; }
+    .sr-backlink { display: inline-block; margin-bottom: 0.8rem; font-size: 0.9rem; }
+    .sr-userbar { float: right; font-size: 0.85rem; color: var(--sr-muted); }
+
+    /* Jak to działa */
+    .sr-steps {
+      display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: stretch;
+      background: var(--sr-surface); border: 1px solid var(--sr-border);
+      border-radius: 16px; padding: 0.9rem 1rem; margin: 1rem 0 1.4rem;
+    }
+    .sr-step { flex: 1 1 150px; min-width: 140px; display: flex; gap: 0.5rem; align-items: flex-start; }
+    .sr-step-num {
+      flex: 0 0 auto; width: 1.5rem; height: 1.5rem; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--sr-accent); color: #101018; font-weight: 700; font-size: 0.8rem;
+    }
+    .sr-step-text { font-size: 0.8rem; color: var(--sr-muted); line-height: 1.35; }
+    .sr-step-text b { color: var(--sr-text); display: block; font-size: 0.82rem; }
+
+    /* Kategorie */
+    .sr-cats { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
+    .sr-cat {
+      border: 1px solid var(--sr-input-border); background: var(--sr-chip-bg);
+      color: var(--sr-text); border-radius: 999px; padding: 0.32rem 0.8rem;
+      font-size: 0.82rem; cursor: pointer; transition: border-color 120ms, background 120ms;
+    }
+    .sr-cat:hover { border-color: var(--sr-accent); }
+    .sr-cat[data-active="true"] {
+      border-color: var(--sr-accent);
+      background: rgba(167, 139, 250, 0.2); /* fallback dla starszych przeglądarek */
+      background: color-mix(in srgb, var(--sr-accent) 22%, transparent);
+      color: var(--sr-text); font-weight: 600;
+    }
+    .sr-cat .cnt { opacity: 0.65; font-size: 0.75rem; margin-left: 0.3rem; }
+
+    /* Szukajka */
+    .sr-search { margin-bottom: 1.1rem; }
+    .sr-search input {
+      width: 100%; max-width: 480px; padding: 0.6rem 0.9rem; border-radius: 12px;
+      border: 1px solid var(--sr-input-border); background: var(--sr-input-bg);
+      color: var(--sr-text); font-size: 0.95rem; outline: none;
+    }
+    .sr-search input:focus { border-color: var(--sr-accent); }
+
+    /* Grid produktów */
+    .sr-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 0.9rem; margin-bottom: 1.2rem;
+    }
+    .sr-card {
+      background: var(--sr-surface); border: 1px solid var(--sr-border);
+      border-radius: 16px; padding: 0.9rem; display: flex; flex-direction: column; gap: 0.5rem;
+    }
+    .sr-thumb {
+      height: 72px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      background: rgba(167, 139, 250, 0.14); /* fallback */
+      background: color-mix(in srgb, var(--sr-accent) 14%, transparent);
+      color: var(--sr-accent); font-weight: 700; font-size: 1.25rem; letter-spacing: 0.06em;
+    }
+    .sr-card h3 { font-size: 0.92rem; line-height: 1.35; font-weight: 600; }
+    .sr-tagpill {
+      align-self: flex-start; font-size: 0.72rem; padding: 0.14rem 0.55rem; border-radius: 999px;
+      background: var(--sr-chip-bg); border: 1px solid var(--sr-input-border); color: var(--sr-muted);
+    }
+    .sr-price { font-size: 1.02rem; font-weight: 700; }
+    .sr-price small { font-weight: 400; color: var(--sr-muted); font-size: 0.72rem; }
+    .sr-card-foot { margin-top: auto; display: flex; flex-direction: column; gap: 0.45rem; }
+    .sr-deeplink { font-size: 0.8rem; }
+    .sr-btn {
+      border: none; border-radius: 10px; padding: 0.55rem 0.9rem; cursor: pointer;
+      font-size: 0.86rem; font-weight: 600; background: var(--sr-accent); color: #101018;
+      text-align: center; transition: transform 120ms, filter 120ms;
+    }
+    .sr-btn:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    .sr-btn.secondary {
+      background: transparent; color: var(--sr-text); border: 1px solid var(--sr-input-border);
+    }
+    .sr-btn.small { padding: 0.35rem 0.7rem; font-size: 0.78rem; }
+    .sr-btn.danger { background: transparent; color: var(--sr-bad); border: 1px solid var(--sr-bad); }
+    .sr-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+    .sr-empty { color: var(--sr-muted); padding: 1.2rem 0.4rem; font-size: 0.92rem; }
+
+    /* Paginacja */
+    .sr-pager { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 2rem; }
+    .sr-pager span { color: var(--sr-muted); font-size: 0.86rem; }
+
+    /* Modal */
+    .sr-modal-overlay {
+      position: fixed; inset: 0; background: var(--sr-overlay); z-index: 60;
+      display: none; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .sr-modal-overlay[data-open="true"] { display: flex; }
+    .sr-modal {
+      width: 100%; max-width: 440px; background: var(--sr-surface);
+      border: 1px solid var(--sr-border); border-radius: 18px; padding: 1.2rem;
+      backdrop-filter: blur(18px); color: var(--sr-text);
+    }
+    body[data-theme="dark"] .sr-modal { background: rgba(14, 14, 26, 0.97); }
+    body[data-theme="light"] .sr-modal { background: rgba(255, 255, 255, 0.98); }
+    .sr-modal h3 { font-size: 1rem; margin-bottom: 0.3rem; }
+    .sr-modal .sr-price { margin-bottom: 0.7rem; }
+    .sr-modal label { display: block; font-size: 0.8rem; color: var(--sr-muted); margin: 0.6rem 0 0.25rem; }
+    .sr-modal input, .sr-modal textarea {
+      width: 100%; padding: 0.5rem 0.7rem; border-radius: 10px;
+      border: 1px solid var(--sr-input-border); background: var(--sr-input-bg);
+      color: var(--sr-text); font: inherit; font-size: 0.9rem;
+    }
+    .sr-modal-actions { display: flex; gap: 0.6rem; margin-top: 1rem; justify-content: flex-end; }
+    .sr-modal-msg { margin-top: 0.7rem; font-size: 0.85rem; line-height: 1.4; }
+    .sr-modal-msg.ok { color: var(--sr-ok); }
+    .sr-modal-msg.err { color: var(--sr-bad); }
+    .sr-modal-msg.bulk { color: var(--sr-warn); }
+
+    /* Moje zapytania */
+    .sr-quotes { margin-bottom: 2rem; }
+    .sr-quotes h2 { font-size: 1.15rem; margin-bottom: 0.7rem; }
+    .sr-quote {
+      background: var(--sr-surface); border: 1px solid var(--sr-border);
+      border-radius: 14px; margin-bottom: 0.6rem; overflow: hidden;
+    }
+    .sr-quote-head {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem;
+      padding: 0.7rem 0.9rem; cursor: pointer; font-size: 0.86rem;
+    }
+    .sr-quote-head:hover { background: var(--sr-chip-bg); }
+    .sr-quote-items { flex: 1 1 auto; min-width: 180px; }
+    .sr-quote-detail { padding: 0.2rem 0.9rem 0.9rem; border-top: 1px solid var(--sr-border); display: none; }
+    .sr-quote[data-open="true"] .sr-quote-detail { display: block; }
+    .sr-role { font-size: 0.72rem; color: var(--sr-muted); border: 1px solid var(--sr-input-border); border-radius: 999px; padding: 0.1rem 0.5rem; }
+
+    .sr-badge {
+      font-size: 0.74rem; font-weight: 600; padding: 0.18rem 0.6rem; border-radius: 999px;
+      border: 1px solid transparent;
+    }
+    .sr-badge { background: transparent; }
+    .sr-badge.st-sent     { color: var(--sr-info); border-color: var(--sr-info); background: color-mix(in srgb, var(--sr-info) 12%, transparent); }
+    .sr-badge.st-priced   { color: var(--sr-warn); border-color: var(--sr-warn); background: color-mix(in srgb, var(--sr-warn) 12%, transparent); }
+    .sr-badge.st-accepted { color: var(--sr-ok); border-color: var(--sr-ok); background: color-mix(in srgb, var(--sr-ok) 12%, transparent); }
+    .sr-badge.st-rejected { color: var(--sr-bad); border-color: var(--sr-bad); background: color-mix(in srgb, var(--sr-bad) 12%, transparent); }
+    .sr-badge.st-expired  { color: var(--sr-muted); border-color: var(--sr-input-border); background: var(--sr-chip-bg); }
+
+    .sr-detail-section { margin-top: 0.8rem; }
+    .sr-detail-section h4 { font-size: 0.82rem; color: var(--sr-muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .sr-item-line { font-size: 0.85rem; padding: 0.15rem 0; }
+    .sr-actions-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+
+    /* Wątek wiadomości */
+    .sr-thread { display: flex; flex-direction: column; gap: 0.35rem; max-height: 260px; overflow-y: auto; padding: 0.2rem 0; }
+    .sr-bubble {
+      max-width: 80%; padding: 0.45rem 0.7rem; border-radius: 12px; font-size: 0.85rem; line-height: 1.4;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .sr-bubble.mine { align-self: flex-end; background: var(--sr-bubble-mine); border: 1px solid rgba(167, 139, 250, 0.35); border-color: color-mix(in srgb, var(--sr-accent) 35%, transparent); }
+    .sr-bubble.theirs { align-self: flex-start; background: var(--sr-bubble-theirs); border: 1px solid var(--sr-border); }
+    .sr-bubble .who { display: block; font-size: 0.68rem; color: var(--sr-muted); margin-bottom: 0.1rem; }
+    .sr-msg-form { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    .sr-msg-form input {
+      flex: 1; padding: 0.5rem 0.7rem; border-radius: 10px;
+      border: 1px solid var(--sr-input-border); background: var(--sr-input-bg); color: var(--sr-text); font: inherit; font-size: 0.88rem;
+    }
+
+    /* Faktura */
+    .sr-invoice { font-size: 0.86rem; line-height: 1.5; }
+    .sr-invoice .lbl { color: var(--sr-muted); }
+
+    /* Stopka */
+    .sr-footer {
+      border-top: 1px solid var(--sr-border); padding: 1.1rem 0 0.4rem;
+      color: var(--sr-muted); font-size: 0.82rem; line-height: 1.5;
+    }
+
+    @media (max-width: 720px) {
+      .sr-steps { flex-direction: column; }
+      .sr-userbar { float: none; display: block; margin-bottom: 0.5rem; }
+    }
+  </style>
+</head>
+<body data-theme="{{ theme or 'dark' }}" data-palette="{{ palette or 'neo' }}">
+  <div class="sr-root">
+
+    <header class="sr-header">
+      <div class="sr-userbar">
+        {% if me %}Zalogowany: <b>{{ me }}</b>{% else %}<a href="{{ url_for('auth.login_route', next='/showroom') }}">Zaloguj się</a>{% endif %}
+      </div>
+      <a class="sr-backlink" href="{{ url_for('system_routes.home') }}">← Strona główna</a>
+      <h1>MA Marketplace — Workwear &amp; BHP dla firm</h1>
+      <p class="sr-lead">
+        Katalog odzieży roboczej i środków ochrony indywidualnej dla firm.
+        Bez koszyka i bez płatności online — wysyłasz zapytanie ofertowe,
+        otrzymujesz wycenę, a towar jedzie bezpośrednio z magazynu dostawcy do Ciebie.
+        Wszystkie ceny netto.
+      </p>
+    </header>
+
+    <div class="sr-steps" aria-label="Jak to działa">
+      <div class="sr-step"><span class="sr-step-num">1</span><span class="sr-step-text"><b>Wybierasz produkty</b>i wysyłasz zapytanie ofertowe</span></div>
+      <div class="sr-step"><span class="sr-step-num">2</span><span class="sr-step-text"><b>Otrzymujesz ofertę</b>z ceną od sprzedawcy</span></div>
+      <div class="sr-step"><span class="sr-step-num">3</span><span class="sr-step-text"><b>Akceptujesz ofertę</b>jednym kliknięciem</span></div>
+      <div class="sr-step"><span class="sr-step-num">4</span><span class="sr-step-text"><b>Faktura po wpłacie</b>na konto — bez płatności online</span></div>
+      <div class="sr-step"><span class="sr-step-num">5</span><span class="sr-step-text"><b>Dostawa bezpośrednia</b>z magazynu dostawcy do Ciebie</span></div>
+    </div>
+
+    <nav class="sr-cats" id="catPills" aria-label="Kategorie"></nav>
+
+    <div class="sr-search">
+      <input id="searchInput" type="search" placeholder="Szukaj w tytułach produktów…" autocomplete="off">
+    </div>
+
+    <div class="sr-grid" id="productGrid"></div>
+    <div class="sr-empty" id="emptyState" hidden>Brak produktów spełniających kryteria.</div>
+
+    <div class="sr-pager" id="pager" hidden>
+      <button class="sr-btn secondary small" id="prevBtn">← Poprzednia</button>
+      <span id="pageInfo"></span>
+      <button class="sr-btn secondary small" id="nextBtn">Następna →</button>
+    </div>
+
+    {% if me %}
+    <section class="sr-quotes" id="quotesSection">
+      <h2>Moje zapytania</h2>
+      <div id="quotesList"><div class="sr-empty">Ładowanie…</div></div>
+    </section>
+    {% endif %}
+
+    <footer class="sr-footer">
+      <p>Płatność wyłącznie przelewem na podstawie faktury. Towar wysyłany bezpośrednio z magazynu dostawcy.</p>
+      <p>Wszystkie ceny w katalogu są cenami netto — podatek VAT doliczany jest na fakturze.</p>
+    </footer>
+  </div>
+
+  <!-- Modal zapytania ofertowego -->
+  <div class="sr-modal-overlay" id="quoteModal">
+    <div class="sr-modal" role="dialog" aria-modal="true">
+      <h3 id="qmTitle"></h3>
+      <div class="sr-price" id="qmPrice"></div>
+      <label for="qmQty">Ilość</label>
+      <input id="qmQty" type="number" min="1" step="1" value="1">
+      <label for="qmNote">Notatka dla sprzedawcy (opcjonalna)</label>
+      <textarea id="qmNote" rows="3" placeholder="np. potrzebne rozmiary, termin dostawy…"></textarea>
+      <div class="sr-modal-msg" id="qmMsg" hidden></div>
+      <div class="sr-actions-row" id="qmBulkRow" hidden>
+        <button class="sr-btn secondary small" id="qmBulkBtn"></button>
+      </div>
+      <div class="sr-modal-actions">
+        <button class="sr-btn secondary" id="qmCancel">Zamknij</button>
+        <button class="sr-btn" id="qmSend">Wyślij zapytanie</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var ME = {{ (me or '')|tojson }};
+  var ME_UID = {{ me_user_id or 0 }};
+  var LOGIN_URL = {{ url_for('auth.login_route', next='/showroom')|tojson }};
+
+  var state = { category: "", q: "", page: 1, perPage: 24, totalPages: 1 };
+  var categories = [];
+  var currentProduct = null;
+
+  // ---------- utils ----------
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  var plnFmt = new Intl.NumberFormat("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function fmtPrice(v) { return plnFmt.format(Number(v || 0)) + " zł"; }
+  function fmtDate(ts) {
+    if (!ts) return "—";
+    var d = new Date(Number(ts) * 1000);
+    return d.toLocaleDateString("pl-PL") + " " + d.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" });
+  }
+  function catLabel(tag) {
+    for (var i = 0; i < categories.length; i++) {
+      if (categories[i].tag === tag) return categories[i].label;
+    }
+    return tag || "—";
+  }
+  function initials(tag) {
+    if (!tag) return "BHP";
+    var parts = String(tag).split("_").filter(Boolean);
+    var out = "";
+    for (var i = 0; i < parts.length && out.length < 3; i++) out += parts[i][0];
+    return out.toUpperCase() || "BHP";
+  }
+  function getJSON(url) { return fetch(url).then(function (r) { return r.json(); }); }
+  function postJSON(url, body) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); });
+  }
+
+  // ---------- kategorie ----------
+  function renderCats() {
+    var el = document.getElementById("catPills");
+    var html = '<button class="sr-cat" data-tag="" data-active="' + (state.category === "") + '">Wszystkie</button>';
+    categories.forEach(function (c) {
+      html += '<button class="sr-cat" data-tag="' + esc(c.tag) + '" data-active="' + (state.category === c.tag) + '">'
+        + esc(c.label) + '<span class="cnt">' + c.count + "</span></button>";
+    });
+    el.innerHTML = html;
+    el.querySelectorAll(".sr-cat").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.category = btn.getAttribute("data-tag") || "";
+        state.page = 1;
+        renderCats();
+        loadProducts();
+      });
+    });
+  }
+
+  function loadCategories() {
+    getJSON("/api/showroom/categories").then(function (j) {
+      if (j && j.ok) { categories = j.categories || []; renderCats(); }
+    }).catch(function () {});
+  }
+
+  // ---------- produkty ----------
+  function productCard(p) {
+    var cta;
+    if (ME) {
+      cta = '<button class="sr-btn" data-cta="' + esc(p.listing_id) + '">Zapytaj o ofertę</button>';
+    } else {
+      cta = '<a class="sr-btn" href="' + esc(LOGIN_URL) + '">Zaloguj się, aby zapytać o ofertę</a>';
+    }
+    var deep = p.deep_link
+      ? '<a class="sr-deeplink" href="' + esc(p.deep_link) + '" target="_blank" rel="noopener">Karta produktu ↗</a>'
+      : "";
+    var unit = p.unit ? " / " + esc(p.unit) : "";
+    return '<div class="sr-card">'
+      + '<div class="sr-thumb">' + esc(initials(p.category)) + "</div>"
+      + "<h3>" + esc(p.title) + "</h3>"
+      + '<span class="sr-tagpill">' + esc(catLabel(p.category)) + "</span>"
+      + '<div class="sr-price">' + fmtPrice(p.price) + ' <small>netto' + unit + "</small></div>"
+      + '<div class="sr-card-foot">' + deep + cta + "</div>"
+      + "</div>";
+  }
+
+  function loadProducts() {
+    var params = new URLSearchParams();
+    if (state.category) params.set("category", state.category);
+    if (state.q) params.set("q", state.q);
+    params.set("page", state.page);
+    params.set("per_page", state.perPage);
+    getJSON("/api/showroom/products?" + params.toString()).then(function (j) {
+      if (!j || !j.ok) return;
+      var grid = document.getElementById("productGrid");
+      var empty = document.getElementById("emptyState");
+      var pager = document.getElementById("pager");
+      var products = j.products || [];
+      state.totalPages = Math.max(1, Math.ceil((j.total || 0) / state.perPage));
+
+      grid.innerHTML = products.map(productCard).join("");
+      empty.hidden = products.length > 0;
+      pager.hidden = j.total <= state.perPage;
+      document.getElementById("pageInfo").textContent =
+        "Strona " + state.page + " z " + state.totalPages + " · " + j.total + " produktów";
+      document.getElementById("prevBtn").disabled = state.page <= 1;
+      document.getElementById("nextBtn").disabled = state.page >= state.totalPages;
+
+      grid.querySelectorAll("[data-cta]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-cta");
+          var prod = products.find(function (p) { return p.listing_id === id; });
+          if (prod) openModal(prod);
+        });
+      });
+    }).catch(function () {});
+  }
+
+  document.getElementById("prevBtn").addEventListener("click", function () {
+    if (state.page > 1) { state.page--; loadProducts(); }
+  });
+  document.getElementById("nextBtn").addEventListener("click", function () {
+    if (state.page < state.totalPages) { state.page++; loadProducts(); }
+  });
+
+  // debounce szukajki
+  var searchTimer = null;
+  document.getElementById("searchInput").addEventListener("input", function (e) {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () {
+      state.q = e.target.value.trim();
+      state.page = 1;
+      loadProducts();
+    }, 300);
+  });
+
+  // ---------- modal zapytania ----------
+  var modal = document.getElementById("quoteModal");
+  function openModal(prod) {
+    currentProduct = prod;
+    document.getElementById("qmTitle").textContent = prod.title;
+    document.getElementById("qmPrice").innerHTML = fmtPrice(prod.price) + " <small>netto" + (prod.unit ? " / " + esc(prod.unit) : "") + "</small>";
+    document.getElementById("qmQty").value = 1;
+    document.getElementById("qmNote").value = "";
+    hideModalMsg();
+    document.getElementById("qmSend").disabled = false;
+    modal.setAttribute("data-open", "true");
+  }
+  function closeModal() { modal.setAttribute("data-open", "false"); currentProduct = null; }
+  function hideModalMsg() {
+    var m = document.getElementById("qmMsg");
+    m.hidden = true; m.className = "sr-modal-msg"; m.textContent = "";
+    document.getElementById("qmBulkRow").hidden = true;
+  }
+  function showModalMsg(kind, text) {
+    var m = document.getElementById("qmMsg");
+    m.hidden = false; m.className = "sr-modal-msg " + kind; m.textContent = text;
+  }
+  document.getElementById("qmCancel").addEventListener("click", closeModal);
+  modal.addEventListener("click", function (e) { if (e.target === modal) closeModal(); });
+
+  document.getElementById("qmSend").addEventListener("click", function () {
+    if (!currentProduct) return;
+    var qty = parseInt(document.getElementById("qmQty").value, 10);
+    if (!qty || qty < 1) { showModalMsg("err", "Podaj poprawną ilość (min. 1)."); return; }
+    var note = document.getElementById("qmNote").value.trim();
+    hideModalMsg();
+    var btn = document.getElementById("qmSend");
+    btn.disabled = true;
+    postJSON("/api/quotes/create", {
+      seller_username: currentProduct.seller,
+      items: [{
+        sku: currentProduct.sku,
+        name: currentProduct.title,
+        qty: qty,
+        unit_price_net: currentProduct.price,
+        listing_id: currentProduct.listing_id
+      }],
+      note: note
+    }).then(function (res) {
+      btn.disabled = false;
+      if (res.status === 201 && res.json && res.json.ok) {
+        showModalMsg("ok", "Zapytanie wysłane. Sprzedawca przygotuje ofertę — status znajdziesz w sekcji „Moje zapytania”.");
+        loadQuotes();
+        return;
+      }
+      var err = (res.json && res.json.error) || "";
+      var bulk = /^bulk_only:.*:min_qty=(\d+)$/.exec(err);
+      if (bulk) {
+        var minQty = parseInt(bulk[1], 10);
+        showModalMsg("bulk",
+          "Produkt ekonomiczny przy zakupie pakietowym — minimalna ilość: " + minQty +
+          " szt. (przy tej wartości transport przestaje zjadać marżę)");
+        var row = document.getElementById("qmBulkRow");
+        var bbtn = document.getElementById("qmBulkBtn");
+        bbtn.textContent = "Ustaw " + minQty + " szt.";
+        bbtn.onclick = function () {
+          document.getElementById("qmQty").value = minQty;
+          hideModalMsg();
+        };
+        row.hidden = false;
+        return;
+      }
+      if (err === "auth_required") {
+        showModalMsg("err", "Sesja wygasła — zaloguj się ponownie.");
+        return;
+      }
+      showModalMsg("err", "Nie udało się wysłać zapytania (" + (err || "błąd sieci") + ").");
+    }).catch(function () {
+      btn.disabled = false;
+      showModalMsg("err", "Błąd sieci — spróbuj ponownie.");
+    });
+  });
+
+  // ---------- Moje zapytania ----------
+  var STATUS_LABELS = {
+    SENT: "Wysłane", PRICED: "Oferta gotowa", ACCEPTED: "Zaakceptowana",
+    REJECTED: "Odrzucona", EXPIRED: "Wygasła"
+  };
+  var INVOICE_LABELS = {
+    ISSUED: "Wystawiona — oczekuje wpłaty",
+    PAID: "Opłacona — zamówienie w realizacji",
+    COMPLETED: "Zrealizowana"
+  };
+  var openQuotes = {};   // quote_id -> true (zachowaj rozwinięcie po odświeżeniu)
+
+  function displayStatus(q) {
+    // Backend trzyma wycenę jako SENT + total_net — UI pokazuje "Oferta gotowa".
+    if (q.status === "SENT" && q.total_net != null) return "PRICED";
+    return q.status;
+  }
+
+  function itemsSummary(q) {
+    var items = q.items || [];
+    if (!items.length) return "—";
+    var first = items[0];
+    var s = (first.name || first.sku || first.listing_id || "?") + " × " + first.qty;
+    if (items.length > 1) s += " (+" + (items.length - 1) + ")";
+    return s;
+  }
+
+  function quoteRow(q) {
+    var st = displayStatus(q);
+    var isBuyer = Number(q.buyer_user_id) === ME_UID;
+    var role = isBuyer ? "Kupujesz" : "Sprzedajesz";
+    var total = q.total_net != null
+      ? '<b>' + fmtPrice(q.total_net) + ' <small style="font-weight:400;">netto</small></b>' : "";
+    return '<div class="sr-quote" data-qid="' + esc(q.quote_id) + '"' + (openQuotes[q.quote_id] ? ' data-open="true"' : "") + '>'
+      + '<div class="sr-quote-head" data-toggle="' + esc(q.quote_id) + '">'
+      + '<span class="sr-quote-items">' + esc(itemsSummary(q)) + "</span>"
+      + '<span class="sr-role">' + role + "</span>"
+      + total
+      + '<span class="sr-badge st-' + st.toLowerCase() + '">' + esc(STATUS_LABELS[st] || st) + "</span>"
+      + '<span style="color:var(--sr-muted);font-size:0.76rem;">' + fmtDate(q.created_ts) + "</span>"
+      + "</div>"
+      + '<div class="sr-quote-detail" id="qd-' + esc(q.quote_id) + '"></div>'
+      + "</div>";
+  }
+
+  function loadQuotes() {
+    if (!ME) return;
+    getJSON("/api/quotes").then(function (j) {
+      if (!j || !j.ok) return;
+      var list = document.getElementById("quotesList");
+      var quotes = j.quotes || [];
+      if (!quotes.length) {
+        list.innerHTML = '<div class="sr-empty">Nie masz jeszcze żadnych zapytań. Wybierz produkt i kliknij „Zapytaj o ofertę”.</div>';
+        return;
+      }
+      list.innerHTML = quotes.map(quoteRow).join("");
+      list.querySelectorAll("[data-toggle]").forEach(function (head) {
+        head.addEventListener("click", function () {
+          var qid = head.getAttribute("data-toggle");
+          var box = head.parentElement;
+          var isOpen = box.getAttribute("data-open") === "true";
+          if (isOpen) { box.removeAttribute("data-open"); delete openQuotes[qid]; }
+          else {
+            box.setAttribute("data-open", "true"); openQuotes[qid] = true;
+            var q = quotes.find(function (x) { return x.quote_id === qid; });
+            if (q) renderQuoteDetail(q);
+          }
+        });
+      });
+      // odśwież rozwinięte
+      quotes.forEach(function (q) { if (openQuotes[q.quote_id]) renderQuoteDetail(q); });
+    }).catch(function () {});
+  }
+
+  function renderQuoteDetail(q) {
+    var el = document.getElementById("qd-" + q.quote_id);
+    if (!el) return;
+    var st = displayStatus(q);
+    var isBuyer = Number(q.buyer_user_id) === ME_UID;
+    var isSeller = Number(q.seller_user_id) === ME_UID;
+
+    var html = '<div class="sr-detail-section"><h4>Pozycje</h4>';
+    (q.items || []).forEach(function (it) {
+      var line = esc(it.name || it.sku || it.listing_id || "?") + " × " + it.qty;
+      if (it.unit_price_net != null) line += " · " + fmtPrice(it.unit_price_net) + " netto/szt.";
+      if (it.sku) line += ' <span style="color:var(--sr-muted);">(' + esc(it.sku) + ")</span>";
+      html += '<div class="sr-item-line">' + line + "</div>";
+    });
+    if (q.note) html += '<div class="sr-item-line" style="color:var(--sr-muted);">Notatka: ' + esc(q.note) + "</div>";
+    html += "</div>";
+
+    // akcje wg roli i statusu
+    var actions = "";
+    if (isBuyer && st === "PRICED") {
+      actions += '<button class="sr-btn small" data-act="accept">Akceptuję ofertę</button>'
+        + '<button class="sr-btn danger small" data-act="reject">Odrzuć</button>';
+    }
+    if (isSeller && st === "SENT") {
+      actions += '<button class="sr-btn secondary small" data-act="price">Wyceń (podaj total netto)</button>';
+    }
+    if (actions) html += '<div class="sr-actions-row">' + actions + "</div>";
+
+    html += '<div class="sr-detail-section"><h4>Wiadomości</h4>'
+      + '<div class="sr-thread" id="th-' + esc(q.quote_id) + '"><span style="color:var(--sr-muted);font-size:0.8rem;">Ładowanie…</span></div>'
+      + '<div class="sr-msg-form">'
+      + '<input id="mi-' + esc(q.quote_id) + '" placeholder="Napisz wiadomość…">'
+      + '<button class="sr-btn small" data-act="msg">Wyślij</button>'
+      + "</div></div>";
+
+    html += '<div class="sr-detail-section"><h4>Faktura</h4><div class="sr-invoice" id="inv-' + esc(q.quote_id) + '">Ładowanie…</div></div>';
+
+    el.innerHTML = html;
+
+    el.querySelectorAll("[data-act]").forEach(function (btn) {
+      btn.addEventListener("click", function () { quoteAction(q, btn.getAttribute("data-act")); });
+    });
+
+    loadThread(q.quote_id);
+    loadInvoice(q, isBuyer, isSeller);
+  }
+
+  function quoteAction(q, act) {
+    if (act === "accept" || act === "reject") {
+      postJSON("/api/quotes/" + q.quote_id + "/respond", { action: act }).then(function (res) {
+        if (res.json && res.json.ok) loadQuotes();
+        else alert("Nie udało się: " + ((res.json && res.json.error) || "błąd"));
+      });
+    } else if (act === "price") {
+      var v = prompt("Cena łączna netto (PLN):");
+      if (v == null) return;
+      var num = parseFloat(String(v).replace(",", "."));
+      if (isNaN(num)) { alert("Niepoprawna kwota."); return; }
+      postJSON("/api/quotes/" + q.quote_id + "/respond", { action: "price", total_net: num }).then(function (res) {
+        if (res.json && res.json.ok) loadQuotes();
+        else if (res.json && res.json.error === "total_below_transport") alert("Kwota poniżej kosztu transportu — oferta nieopłacalna.");
+        else alert("Nie udało się: " + ((res.json && res.json.error) || "błąd"));
+      });
+    } else if (act === "msg") {
+      var input = document.getElementById("mi-" + q.quote_id);
+      var text = (input.value || "").trim();
+      if (!text) return;
+      postJSON("/api/quotes/" + q.quote_id + "/messages", { text: text }).then(function (res) {
+        if (res.status === 201) { input.value = ""; loadThread(q.quote_id); }
+        else alert("Nie udało się wysłać wiadomości.");
+      });
+    }
+  }
+
+  function loadThread(qid) {
+    getJSON("/api/quotes/" + qid + "/messages").then(function (j) {
+      var th = document.getElementById("th-" + qid);
+      if (!th || !j || !j.ok) return;
+      var msgs = j.messages || [];
+      if (!msgs.length) {
+        th.innerHTML = '<span style="color:var(--sr-muted);font-size:0.8rem;">Brak wiadomości — możesz napisać pierwszą.</span>';
+        return;
+      }
+      th.innerHTML = msgs.map(function (m) {
+        var mine = m.sender === ME;
+        return '<div class="sr-bubble ' + (mine ? "mine" : "theirs") + '">'
+          + '<span class="who">' + esc(m.sender) + " · " + fmtDate(m.timestamp) + "</span>"
+          + esc(m.body) + "</div>";
+      }).join("");
+      th.scrollTop = th.scrollHeight;
+    }).catch(function () {});
+  }
+
+  function loadInvoice(q, isBuyer, isSeller) {
+    getJSON("/api/quotes/" + q.quote_id + "/invoice").then(function (j) {
+      var el = document.getElementById("inv-" + q.quote_id);
+      if (!el || !j || !j.ok) return;
+      var inv = j.invoice;
+      var st = displayStatus(q);
+      if (!inv) {
+        if (st === "ACCEPTED") {
+          if (isSeller) {
+            el.innerHTML = '<button class="sr-btn small" id="issue-' + esc(q.quote_id) + '">Wystaw fakturę</button>';
+            document.getElementById("issue-" + q.quote_id).addEventListener("click", function () {
+              var ref = prompt("Numer faktury z systemu zewnętrznego (opcjonalny):") || "";
+              postJSON("/api/quotes/" + q.quote_id + "/invoice", ref.trim() ? { external_ref: ref.trim() } : {})
+                .then(function (res) {
+                  if (res.status === 201) loadQuotes();
+                  else alert("Nie udało się wystawić faktury: " + ((res.json && res.json.error) || "błąd"));
+                });
+            });
+          } else {
+            el.innerHTML = '<span style="color:var(--sr-muted);">Oczekuje na fakturę od sprzedawcy.</span>';
+          }
+        } else {
+          el.innerHTML = '<span style="color:var(--sr-muted);">Faktura pojawi się po akceptacji oferty.</span>';
+        }
+        return;
+      }
+      var html = '<div><span class="lbl">Numer:</span> ' + esc(inv.external_ref || "—") + "</div>"
+        + '<div><span class="lbl">Netto:</span> ' + fmtPrice(inv.amount_net)
+        + ' · <span class="lbl">VAT (' + esc(inv.vat_rate) + '%):</span> ' + fmtPrice(inv.vat_amount)
+        + ' · <span class="lbl">Brutto:</span> <b>' + fmtPrice(inv.amount_gross) + "</b></div>"
+        + '<div><span class="lbl">Status:</span> ' + esc(INVOICE_LABELS[inv.status] || inv.status) + "</div>";
+      if (isSeller && inv.status === "ISSUED") {
+        html += '<div class="sr-actions-row"><button class="sr-btn small" id="pay-' + esc(inv.invoice_id) + '">Potwierdź wpłatę</button></div>';
+      }
+      if (isSeller && inv.status === "PAID") {
+        html += '<div class="sr-actions-row"><button class="sr-btn small" id="done-' + esc(inv.invoice_id) + '">Oznacz zrealizowane</button></div>';
+      }
+      el.innerHTML = html;
+      var payBtn = document.getElementById("pay-" + inv.invoice_id);
+      if (payBtn) payBtn.addEventListener("click", function () {
+        postJSON("/api/invoices/" + inv.invoice_id + "/confirm-payment", {}).then(function (res) {
+          if (res.json && res.json.ok) loadQuotes();
+          else alert("Nie udało się: " + ((res.json && res.json.error) || "błąd"));
+        });
+      });
+      var doneBtn = document.getElementById("done-" + inv.invoice_id);
+      if (doneBtn) doneBtn.addEventListener("click", function () {
+        postJSON("/api/invoices/" + inv.invoice_id + "/complete", {}).then(function (res) {
+          if (res.json && res.json.ok) loadQuotes();
+          else alert("Nie udało się: " + ((res.json && res.json.error) || "błąd"));
+        });
+      });
+    }).catch(function () {});
+  }
+
+  // ---------- start ----------
+  loadCategories();
+  loadProducts();
+  loadQuotes();
+})();
+</script>
+</body>
+</html>
