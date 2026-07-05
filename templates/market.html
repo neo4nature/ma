@@ -195,9 +195,11 @@
         <div class="row" style="justify-content:space-between;">
           <strong>{{ '%.2f'|format(it.price) }} {{ it.currency }}</strong>
           {% if me and it.status == 'ACTIVE' and it.seller != me %}
-            <form action="{{ url_for('market_buy', listing_id=it.listing_id) }}" method="post">
-              <button type="submit">Kup</button>
-            </form>
+            {% if it.listing_id and it.listing_id.startswith('rawpol-') %}
+              <a class="pill" href="{{ url_for('showroom.showroom_page') }}">Zapytaj o wycenę</a>
+            {% else %}
+              <a class="pill" href="/comm?with={{ it.seller }}">Napisz do sprzedawcy</a>
+            {% endif %}
           {% elif it.status == 'SOLD' %}
             <span class="pill">Kupione przez: {{ it.owner or '—' }}</span>
           {% else %}

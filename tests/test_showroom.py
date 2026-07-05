@@ -274,3 +274,27 @@ def test_showroom_routes_registered(tmp_path):
     assert "/showroom" in rules
     assert "/api/showroom/products" in rules
     assert "/api/showroom/categories" in rules
+
+
+# --- 6. regression: /market must render for a logged-in user ----------------
+# (market.html referenced a nonexistent 'market_buy' endpoint -> BuildError 500
+#  once ACTIVE listings from another seller existed; found live 2026-07-05)
+
+def test_market_page_renders_logged_in_with_foreign_listings(tmp_path):
+    app_mod = _load_app(tmp_path)
+    _seed_listings(app_mod)
+    client = app_mod.app.test_client()
+    _register_and_login(app_mod, client, "neo_test")
+    resp = client.get("/market")
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    html = resp.get_data(as_text=True)
+    assert "Zapytaj o wycenę" in html          # rawpol-* -> showroom link
+    assert "Napisz do sprzedawcy" in html      # non-rawpol -> comm link
+
+
+def test_market_page_renders_logged_out(tmp_path):
+    app_mod = _load_app(tmp_path)
+    _seed_listings(app_mod)
+    client = app_mod.app.test_client()
+    resp = client.get("/market")
+    assert resp.status_code == 200
