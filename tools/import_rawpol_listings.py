@@ -29,14 +29,18 @@ VALID_TAGS = {
 
 
 def build_title(row: sqlite3.Row) -> str:
-    parts = [row["brand"], row["symbol"] or row["variant_base"]]
-    size = row["variant_size"]
+    brand = (row["brand"] or "").strip()
+    symbol = (row["symbol"] or row["variant_base"] or "").strip()
+    parts = [brand]
+    if symbol and symbol.upper() != brand.upper():
+        parts.append(symbol)
     color = row["variant_color"]
+    size = row["variant_size"]
     if color:
-        parts.append(color)
+        parts.append(str(color).strip())
     if size:
-        parts.append(f"rozm. {size}")
-    return " ".join(str(p).strip() for p in parts if p and str(p).strip()) or f"SKU {row['sku']}"
+        parts.append(f"rozm. {str(size).strip()}")
+    return " ".join(p for p in parts if p) or f"SKU {row['sku']}"
 
 
 def build_description(row: sqlite3.Row) -> str:
