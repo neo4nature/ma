@@ -756,6 +756,10 @@ def account():
                 except Exception:
                     flash("Nie udało się odczytać fingerprintu.")
 
+        if req and not fp:
+            # require_device bez przypisanego fingerprinta = konto nie do odblokowania
+            req = 0
+            flash("Najpierw przypisz urządzenie — bez niego wymóg zablokowałby konto.")
         set_device_binding(BASE_DIR, me, bool(req), fp)
         user = get_user_by_username(BASE_DIR, me) or user
 
