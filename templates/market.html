@@ -184,7 +184,7 @@
     {% for it in listings %}
       <div class="card">
         {% if it.thumb_path %}
-          <img class="thumb" src="{{ url_for('media', relpath=it.thumb_path) }}" alt="thumb">
+          <img class="thumb" src="{{ url_for('showroom.public_media', relpath=it.thumb_path) }}" alt="thumb" loading="lazy">
         {% else %}
           <div class="thumb" style="display:flex;align-items:center;justify-content:center;">brak zdjęcia</div>
         {% endif %}

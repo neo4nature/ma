@@ -11,9 +11,12 @@ quote creation, messaging and invoices happen through those endpoints.
 
 from __future__ import annotations
 
-from flask import Blueprint, g, jsonify, render_template, request
+from pathlib import Path
+
+from flask import Blueprint, abort, g, jsonify, render_template, request, send_file
 
 from core.i18n import LANGS
+from core.safe_fs import UnsafePath, safe_resolve_file
 from db import connect, get_user_by_username, get_user_preferences
 
 
@@ -79,7 +82,7 @@ def _fetch_rawpol_rows(base_dir: str, category: str | None = None) -> list[dict]
     for an exact match.
     """
     sql = (
-        "SELECT listing_id, seller, title, price, currency, description "
+        "SELECT listing_id, seller, title, price, currency, description, thumb_path "
         "FROM market_listings "
         "WHERE status='ACTIVE' AND listing_id LIKE 'rawpol-%'"
     )
@@ -168,6 +171,7 @@ def showroom_products():
             continue  # LIKE prefilter over-matched — require exact tag
         if q_lower and q_lower not in (row.get("title") or "").lower():
             continue
+        thumb = row.get("thumb_path")
         products.append({
             "listing_id": row["listing_id"],
             "sku": meta["sku"],
@@ -178,6 +182,7 @@ def showroom_products():
             "unit": meta["unit"],
             "deep_link": meta["deep_link"],
             "seller": row["seller"],
+            "thumb": f"/public_media/{thumb}" if thumb else None,
         })
 
     total = len(products)
@@ -191,6 +196,20 @@ def showroom_products():
         "per_page": per_page,
         "products": page_items,
     })
+
+
+@showroom_bp.route("/public_media/<path:relpath>")
+def public_media(relpath: str):
+    """Serve files from PUBLIC_MEDIA_DIR (listing thumbnails etc.)."""
+    import app as legacy_app
+
+    try:
+        path = safe_resolve_file(Path(legacy_app.PUBLIC_MEDIA_DIR), relpath)
+    except (UnsafePath, ValueError):
+        abort(404)
+    if not path.is_file():
+        abort(404)
+    return send_file(str(path), max_age=86400)
 
 
 @showroom_bp.route("/api/showroom/categories")

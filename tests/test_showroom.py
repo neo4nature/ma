@@ -298,3 +298,50 @@ def test_market_page_renders_logged_out(tmp_path):
     client = app_mod.app.test_client()
     resp = client.get("/market")
     assert resp.status_code == 200
+
+
+# --- 7. thumbnails: /public_media route + thumb field in products API --------
+
+def _seed_thumb(app_mod, listing_id):
+    import db as dbm
+    thumb_dir = os.path.join(app_mod.PUBLIC_MEDIA_DIR, "rawpol_thumbs")
+    os.makedirs(thumb_dir, exist_ok=True)
+    jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 16 + b"\xff\xd9"
+    with open(os.path.join(thumb_dir, "test.jpg"), "wb") as fh:
+        fh.write(jpeg)
+    conn = dbm.connect(app_mod.BASE_DIR)
+    conn.execute(
+        "UPDATE market_listings SET thumb_path=? WHERE listing_id=?",
+        ("rawpol_thumbs/test.jpg", listing_id),
+    )
+    conn.commit()
+    conn.close()
+    return jpeg
+
+
+def test_public_media_serves_thumb(tmp_path):
+    app_mod = _load_app(tmp_path)
+    _seed_listings(app_mod)
+    jpeg = _seed_thumb(app_mod, "rawpol-RG-100")
+    client = app_mod.app.test_client()
+    resp = client.get("/public_media/rawpol_thumbs/test.jpg")
+    assert resp.status_code == 200
+    assert resp.data == jpeg
+
+
+def test_public_media_rejects_traversal_and_missing(tmp_path):
+    app_mod = _load_app(tmp_path)
+    client = app_mod.app.test_client()
+    assert client.get("/public_media/../ma.db").status_code == 404
+    assert client.get("/public_media/rawpol_thumbs/nope.jpg").status_code == 404
+
+
+def test_products_api_thumb_field(tmp_path):
+    app_mod = _load_app(tmp_path)
+    _seed_listings(app_mod)
+    _seed_thumb(app_mod, "rawpol-RG-100")
+    client = app_mod.app.test_client()
+    data = client.get("/api/showroom/products").get_json()
+    by_id = {p["listing_id"]: p for p in data["products"]}
+    assert by_id["rawpol-RG-100"]["thumb"] == "/public_media/rawpol_thumbs/test.jpg"
+    assert by_id["rawpol-RG-200"]["thumb"] is None
