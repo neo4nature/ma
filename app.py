@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash, send_from_directory, send_file, abort, g
 import secrets
 import os
+import re
 import json
 import time
 import uuid
@@ -1665,25 +1666,87 @@ def api_pool_ping():
     return jsonify({"ok": True, "contrib": st})
 
 
+# Simple Shop Core v0.1 — pricing modes available in the public form.
+# 'quote' is intentionally absent: it stays reserved for the BHP/B2B import flow.
+MARKET_FORM_PRICING_MODES = ("fiat", "life_coin", "barter", "free", "external_link")
+MARKET_BASE_CURRENCIES = ("GBP", "PLN", "EUR", "LC")
+MARKET_CUSTOM_CURRENCY_RE = re.compile(r"^[A-Z0-9_]{1,12}$")
+MARKET_LISTING_TYPES = ("product", "service", "creator_space", "local_discovery")
+MARKET_ALLOW_TOPUP = ("nie", "do_ustalenia", "w_opisie")
+
+
 @require_login
 def market_create():
     me = current_user() or ""
     title = (request.form.get("title") or "").strip()
     description = (request.form.get("description") or "").strip()
-    price_raw = (request.form.get("price") or "0").strip()
     bg_mode = (request.form.get("bg_mode") or "auto").strip()
+    pricing_mode = (request.form.get("pricing_mode") or "life_coin").strip()
 
-    try:
-        price = float(price_raw)
-    except ValueError:
-        price = 0.0
+    def back(msg: str):
+        flash(msg)
+        return redirect(url_for("market_storage.market"))
 
     if not title:
-        flash("Tytuł jest wymagany.")
-        return redirect(url_for("market_storage.market"))
-    if price <= 0:
-        flash("Cena musi być większa od zera.")
-        return redirect(url_for("market_storage.market"))
+        return back("Tytuł jest wymagany.")
+    if pricing_mode not in MARKET_FORM_PRICING_MODES:
+        return back("Nieznany tryb rozliczenia. Zapytania ofertowe BHP mają osobny proces.")
+
+    price = 0.0
+    currency = ""
+    custom_currency_label = None
+    exchange_description = None
+    allow_topup = None
+    external_url = None
+    is_affiliate = False
+    disclosure_text = None
+    success_msg = "Oferta wystawiona. Pojawi się w feedzie, gdy tylko zapis zostanie odświeżony."
+
+    if pricing_mode in ("fiat", "life_coin"):
+        try:
+            price = float((request.form.get("price") or "0").strip())
+        except ValueError:
+            price = 0.0
+        if price <= 0:
+            return back("Cena musi być większa od zera.")
+        if pricing_mode == "life_coin":
+            currency = "LC"
+        else:
+            currency = (request.form.get("currency") or "").strip().upper()
+            if currency == "CUSTOM":
+                label = (request.form.get("custom_currency") or "").strip().upper()
+                if not MARKET_CUSTOM_CURRENCY_RE.match(label):
+                    return back("Własna waluta: użyj 1-12 znaków (litery, cyfry, podkreślenie), np. MUSZELKI.")
+                custom_currency_label = label
+            elif currency not in MARKET_BASE_CURRENCIES:
+                return back("Wybierz walutę z listy albo dodaj własną.")
+    elif pricing_mode == "barter":
+        exchange_description = (request.form.get("exchange_description") or "").strip()
+        if not exchange_description:
+            return back("Przy barterze warto napisać, co przyjmiesz w zamian — choćby „do uzgodnienia”.")
+        allow_topup = (request.form.get("allow_topup") or "").strip()
+        if allow_topup not in MARKET_ALLOW_TOPUP:
+            allow_topup = None
+        success_msg = "Oferta wymiany wystawiona. Ludzie będą mogli zaproponować, co dadzą w zamian."
+    elif pricing_mode == "free":
+        exchange_description = (request.form.get("exchange_description") or "").strip() or None
+        success_msg = "Oferta bez ceny wystawiona. Pamiętaj, żeby jasno ustalić odbiór w rozmowie."
+    elif pricing_mode == "external_link":
+        external_url = (request.form.get("external_url") or "").strip()
+        if not (external_url.startswith("http://") or external_url.startswith("https://")):
+            return back("Dodaj link źródłowy (http/https), żeby karta mogła prowadzić do właściwego miejsca.")
+        is_affiliate = (request.form.get("is_affiliate") or "").strip() == "tak"
+        if is_affiliate:
+            disclosure_text = (request.form.get("disclosure_text") or "").strip()
+            if not disclosure_text:
+                return back("Link partnerski musi mieć krótkie oznaczenie, żeby użytkownik wiedział, że możemy dostać prowizję.")
+        success_msg = "Link dodany do marketplace. Prowadzimy ludzi do źródła, nie udajemy sprzedawcy."
+
+    listing_type = (request.form.get("listing_type") or "product").strip()
+    if listing_type not in MARKET_LISTING_TYPES:
+        listing_type = "product"
+    region = (request.form.get("region") or "").strip()[:64] or None
+    tags = (request.form.get("tags") or "").strip()[:200] or None
 
     listing_id = str(uuid.uuid4())
     create_market_listing(
@@ -1693,12 +1756,22 @@ def market_create():
         title=title,
         description=description,
         price=price,
-        currency="LC",
+        currency=currency,
         status="ACTIVE",
         owner=None,
         asset_id=None,
         media_dir=None,
         thumb_path=None,
+        pricing_mode=pricing_mode,
+        exchange_description=exchange_description,
+        allow_topup=allow_topup,
+        external_url=external_url,
+        is_affiliate=is_affiliate,
+        disclosure_text=disclosure_text,
+        custom_currency_label=custom_currency_label,
+        listing_type=listing_type,
+        region=region,
+        tags=tags,
     )
 
     # optional photo processing
@@ -1728,7 +1801,7 @@ def market_create():
             # never block listing creation
             pass
 
-    flash("Dodano ofertę.")
+    flash(success_msg)
     return redirect(url_for("market_storage.market"))
 
 

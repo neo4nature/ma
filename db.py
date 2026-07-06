@@ -328,6 +328,34 @@ def init_db(base_dir: str) -> None:
         },
     )
 
+    # Simple Shop Core v0.1: flexible pricing modes (fiat/LC/barter/free/
+    # external_link) + hooks for the adaptive feed. Defaults keep legacy
+    # rows behaving as before (life_coin = old LC-only flow).
+    _ensure_table_columns(
+        conn,
+        table="market_listings",
+        columns={
+            "pricing_mode": "TEXT NOT NULL DEFAULT 'life_coin'",
+            "exchange_description": "TEXT",
+            "allow_topup": "TEXT",
+            "external_url": "TEXT",
+            "is_affiliate": "INTEGER NOT NULL DEFAULT 0",
+            "disclosure_text": "TEXT",
+            "custom_currency_label": "TEXT",
+            "listing_type": "TEXT NOT NULL DEFAULT 'product'",
+            "region": "TEXT",
+            "tags": "TEXT",
+        },
+    )
+    # Rawpol B2B imports predate pricing_mode; they use the quote flow only.
+    try:
+        cur.execute(
+            "UPDATE market_listings SET pricing_mode='quote' "
+            "WHERE listing_id LIKE 'rawpol-%' AND pricing_mode='life_coin'"
+        )
+    except Exception:
+        pass
+
     conn.commit()
 
     # bootstrap demo users if DB is empty
@@ -1208,14 +1236,30 @@ def create_market_listing(
     asset_id: str | None = None,
     media_dir: str | None = None,
     thumb_path: str | None = None,
+    pricing_mode: str = "life_coin",
+    exchange_description: str | None = None,
+    allow_topup: str | None = None,
+    external_url: str | None = None,
+    is_affiliate: bool = False,
+    disclosure_text: str | None = None,
+    custom_currency_label: str | None = None,
+    listing_type: str = "product",
+    region: str | None = None,
+    tags: str | None = None,
 ) -> dict:
     now = time.time()
     conn = connect(base_dir)
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO market_listings(listing_id, seller, title, description, price, currency, status, owner, asset_id, media_dir, thumb_path, created_ts, updated_ts)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO market_listings(
+            listing_id, seller, title, description, price, currency, status, owner,
+            asset_id, media_dir, thumb_path,
+            pricing_mode, exchange_description, allow_topup, external_url,
+            is_affiliate, disclosure_text, custom_currency_label,
+            listing_type, region, tags,
+            created_ts, updated_ts)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             listing_id,
@@ -1229,6 +1273,16 @@ def create_market_listing(
             asset_id,
             media_dir,
             thumb_path,
+            pricing_mode,
+            exchange_description,
+            allow_topup,
+            external_url,
+            1 if is_affiliate else 0,
+            disclosure_text,
+            custom_currency_label,
+            listing_type,
+            region,
+            tags,
             now,
             now,
         ),

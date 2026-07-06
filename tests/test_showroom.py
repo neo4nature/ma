@@ -288,8 +288,9 @@ def test_market_page_renders_logged_in_with_foreign_listings(tmp_path):
     resp = client.get("/market")
     assert resp.status_code == 200, resp.get_data(as_text=True)
     html = resp.get_data(as_text=True)
-    assert "Zapytaj o wycenę" in html          # rawpol-* -> showroom link
-    assert "Napisz do sprzedawcy" in html      # non-rawpol -> comm link
+    # CTA copy per Simple Shop Core v0.1 (Lira's CTA matrix, 2026-07-06)
+    assert "Zapytaj o ofertę" in html          # rawpol-*/quote -> showroom link
+    assert "Zapytaj o LC" in html              # legacy life_coin -> comm link
 
 
 def test_market_page_renders_logged_out(tmp_path):

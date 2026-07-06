@@ -143,23 +143,113 @@
     {% endif %}
   </div>
   {% endif %}
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="card" style="margin-bottom:16px;border-color:var(--accent-standard);">
+        {% for m in messages %}<div>{{ m }}</div>{% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
   {% if me %}
   <div class="card" style="margin-bottom:16px;">
     <h2>Dodaj ofertę</h2>
     <form action="{{ url_for('market_storage.market_create') }}" method="post" enctype="multipart/form-data">
-      <div class="row">
-        <div style="flex:1;min-width:240px;">
-          <label>Tytuł</label>
-          <input name="title" placeholder="np. Drewniany triskelion" required>
+      <label>Co wystawiasz?</label>
+      <input name="title" placeholder="np. świeca sojowa, rękawice robocze, sadzonki pomidorów, obraz, domowy chleb" required>
+      <div class="muted">Krótko i po ludzku — tak, żeby od razu było wiadomo, co to jest.</div>
+
+      <label style="margin-top:8px;display:block;">Opisz ofertę</label>
+      <textarea name="description" rows="3" placeholder="Napisz kilka zdań: stan, rozmiar, materiał, ilość, odbiór, historia przedmiotu albo dla kogo to może być dobre."></textarea>
+      <div class="muted">Nie musi być idealnie. Wystarczy uczciwy opis.</div>
+
+      <div class="row" style="margin-top:8px;">
+        <div style="flex:1;min-width:200px;">
+          <label>Jaki to typ oferty?</label>
+          <select name="listing_type">
+            <option value="product">Produkt</option>
+            <option value="service">Usługa</option>
+            <option value="creator_space">Rękodzieło / twórczość</option>
+            <option value="local_discovery">Lokalna żywność / farm</option>
+          </select>
         </div>
-        <div style="width:160px;">
-          <label>Cena (LC)</label>
-          <input name="price" type="number" step="0.01" min="0" required>
+        <div style="flex:1;min-width:200px;">
+          <label>Dodaj tagi</label>
+          <input name="tags" placeholder="np. ogród, handmade, lokalne, organic, BHP, prezent, barter">
+        </div>
+        <div style="flex:1;min-width:200px;">
+          <label>Gdzie to jest?</label>
+          <input name="region" placeholder="np. Wales, Toruń, Cardiff, UK-wide, online">
         </div>
       </div>
-      <label>Opis</label>
-      <textarea name="description" rows="3" placeholder="Krótko: stan, wymiary, co zawiera..."></textarea>
-      <div class="row">
+
+      <label style="margin-top:8px;display:block;">Jak chcesz to rozliczyć?</label>
+      <select name="pricing_mode" id="pricingMode">
+        <option value="fiat">Cena w walucie</option>
+        <option value="life_coin">LifeCoin (LC) — tryb MA</option>
+        <option value="barter">Wymiana / barter</option>
+        <option value="free">Oddam / bez ceny</option>
+        <option value="external_link">Link zewnętrzny</option>
+      </select>
+      <div class="muted">Możesz wybrać zwykłą cenę, LifeCoin, wymianę, oddanie za darmo albo link zewnętrzny.</div>
+
+      <div id="modeFiat" class="mode-box" style="margin-top:8px;">
+        <div class="row">
+          <div style="width:160px;">
+            <label>Cena</label>
+            <input name="price" type="number" step="0.01" min="0" placeholder="np. 20">
+          </div>
+          <div style="width:180px;">
+            <label>Waluta</label>
+            <select name="currency" id="currencySel">
+              <option value="GBP">GBP</option>
+              <option value="PLN">PLN</option>
+              <option value="EUR">EUR</option>
+              <option value="LC">LC</option>
+              <option value="CUSTOM">Inna waluta…</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:200px;display:none;" id="customCurrencyBox">
+            <label>Wpisz walutę</label>
+            <input name="custom_currency" placeholder="np. USD, CZK, NOK, MUSZELKI, ZAPALKI" maxlength="12">
+            <div class="muted">1-12 znaków: litery, cyfry, podkreślenie. Przy nietypowych walutach dopisz w opisie, co masz na myśli.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="modeBarter" class="mode-box" style="margin-top:8px;display:none;">
+        <label>Co przyjmiesz w zamian?</label>
+        <input name="exchange_description" placeholder="np. sadzonki, domowy chleb, pomoc w ogrodzie, materiały, inny produkt, do uzgodnienia">
+        <div class="muted">Barter nie musi mieć dokładnej wartości. Ważne, żeby druga osoba wiedziała, na jaką wymianę jesteś otwarty.</div>
+        <label style="margin-top:6px;display:block;">Czy dopuszczasz dopłatę?</label>
+        <select name="allow_topup">
+          <option value="nie">Nie</option>
+          <option value="do_ustalenia">Tak, do ustalenia</option>
+          <option value="w_opisie">Tak, wpiszę szczegóły w opisie</option>
+        </select>
+      </div>
+
+      <div id="modeFree" class="mode-box" style="margin-top:8px;display:none;">
+        <label>Warunki odbioru</label>
+        <input name="exchange_description_free" placeholder="np. odbiór osobisty, kto pierwszy ten lepszy, tylko lokalnie, proszę odebrać do weekendu">
+        <div class="muted">Napisz, czy trzeba odebrać osobiście i czy są jakieś warunki.</div>
+      </div>
+
+      <div id="modeExternal" class="mode-box" style="margin-top:8px;display:none;">
+        <label>Link źródłowy</label>
+        <input name="external_url" placeholder="https://...">
+        <label style="margin-top:6px;display:block;">Czy to link partnerski?</label>
+        <select name="is_affiliate" id="affiliateSel">
+          <option value="nie">Nie</option>
+          <option value="tak">Tak</option>
+        </select>
+        <div id="disclosureBox" style="display:none;">
+          <label style="margin-top:6px;display:block;">Tekst oznaczenia</label>
+          <input name="disclosure_text" value="Link partnerski — możemy otrzymać prowizję bez dodatkowego kosztu dla Ciebie.">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px;">
         <div style="flex:1;min-width:240px;">
           <label>Zdjęcie (opcjonalnie)</label>
           <input name="photo" type="file" accept="image/*">
@@ -174,9 +264,49 @@
           </select>
         </div>
       </div>
-      <button type="submit">Dodaj</button>
+      <button type="submit" style="margin-top:8px;">Dodaj</button>
     </form>
   </div>
+
+  <script>
+    (function(){
+      const mode = document.getElementById('pricingMode');
+      const boxes = {
+        fiat: document.getElementById('modeFiat'),
+        life_coin: document.getElementById('modeFiat'),
+        barter: document.getElementById('modeBarter'),
+        free: document.getElementById('modeFree'),
+        external_link: document.getElementById('modeExternal'),
+      };
+      const currencySel = document.getElementById('currencySel');
+      const customBox = document.getElementById('customCurrencyBox');
+      const affSel = document.getElementById('affiliateSel');
+      const discBox = document.getElementById('disclosureBox');
+      const freeInput = document.querySelector('#modeFree input');
+      const barterInput = document.querySelector('#modeBarter input[name=exchange_description]');
+
+      function sync(){
+        const m = mode.value;
+        document.querySelectorAll('.mode-box').forEach(b => b.style.display = 'none');
+        if(boxes[m]) boxes[m].style.display = '';
+        // life_coin: waluta zablokowana na LC
+        if(m === 'life_coin'){
+          currencySel.value = 'LC';
+          currencySel.disabled = true;
+        } else {
+          currencySel.disabled = false;
+        }
+        // free używa tego samego pola exchange_description co barter (serwer czyta jedno)
+        if(freeInput) freeInput.name = (m === 'free') ? 'exchange_description' : 'exchange_description_free';
+        if(barterInput) barterInput.name = (m === 'barter') ? 'exchange_description' : 'exchange_description_barter';
+        customBox.style.display = (m === 'fiat' && currencySel.value === 'CUSTOM') ? '' : 'none';
+      }
+      mode.addEventListener('change', sync);
+      currencySel.addEventListener('change', sync);
+      affSel.addEventListener('change', () => { discBox.style.display = (affSel.value === 'tak') ? '' : 'none'; });
+      sync();
+    })();
+  </script>
   {% endif %}
 
   <h2>Oferty</h2>
@@ -191,13 +321,41 @@
         <h3 style="margin:10px 0 6px;">{{ it.title }}</h3>
         <div class="muted">Sprzedawca: {{ it.seller }} · Status: {{ it.status }}</div>
         <p>{{ it.description }}</p>
+        {% set pmode = it.pricing_mode or 'life_coin' %}
+        {% if pmode == 'barter' %}
+          {% if it.exchange_description %}
+            <div class="muted">W zamian: {{ it.exchange_description }}{% if it.allow_topup == 'do_ustalenia' %} · dopłata do ustalenia{% elif it.allow_topup == 'w_opisie' %} · dopłata: szczegóły w opisie{% endif %}</div>
+          {% endif %}
+          <div class="muted" style="font-size:.8em;">Ta oferta jest otwarta na wymianę — napisz, co możesz zaproponować.</div>
+        {% elif pmode == 'free' %}
+          {% if it.exchange_description %}<div class="muted">Odbiór: {{ it.exchange_description }}</div>{% endif %}
+          <div class="muted" style="font-size:.8em;">Bez ceny — właściciel oddaje lub udostępnia. Szczegóły odbioru ustalicie w rozmowie.</div>
+        {% elif pmode == 'external_link' %}
+          <div class="muted" style="font-size:.8em;">{% if it.is_affiliate %}{{ it.disclosure_text or 'Link partnerski oznaczony jawnie.' }} Zakup odbywa się na stronie partnera.{% else %}Sprzedaż i kontakt odbywają się na stronie źródłowej.{% endif %}</div>
+        {% endif %}
         <div class="row" style="justify-content:space-between;">
-          <strong>{{ '%.2f'|format(it.price) }} {{ it.currency }}</strong>
-          {% if me and it.status == 'ACTIVE' and it.seller != me %}
-            {% if it.listing_id and it.listing_id.startswith('rawpol-') %}
-              <a class="pill" href="{{ url_for('showroom.showroom_page') }}">Zapytaj o wycenę</a>
+          {% if pmode in ('fiat', 'life_coin', 'quote') %}
+            <strong>{{ '%.2f'|format(it.price) }} {{ it.custom_currency_label if it.currency == 'CUSTOM' else it.currency }}</strong>
+          {% elif pmode == 'barter' %}
+            <strong>Wymiana / barter</strong>
+          {% elif pmode == 'free' %}
+            <strong>Oddam / bez ceny</strong>
+          {% elif pmode == 'external_link' %}
+            <strong>{% if it.is_affiliate %}Link partnerski{% else %}Link zewnętrzny{% endif %}</strong>
+          {% endif %}
+          {% if pmode == 'external_link' and it.external_url %}
+            <a class="pill" href="{{ it.external_url }}" target="_blank" rel="noopener nofollow">Odwiedź</a>
+          {% elif me and it.status == 'ACTIVE' and it.seller != me %}
+            {% if pmode == 'quote' or (it.listing_id and it.listing_id.startswith('rawpol-')) %}
+              <a class="pill" href="{{ url_for('showroom.showroom_page') }}">Zapytaj o ofertę</a>
+            {% elif pmode == 'barter' %}
+              <a class="pill" href="/comm?with={{ it.seller }}">Zaproponuj wymianę</a>
+            {% elif pmode == 'free' %}
+              <a class="pill" href="/comm?with={{ it.seller }}">Poproś o odbiór</a>
+            {% elif pmode == 'fiat' %}
+              <a class="pill" href="/comm?with={{ it.seller }}">Zapytaj o zakup</a>
             {% else %}
-              <a class="pill" href="/comm?with={{ it.seller }}">Napisz do sprzedawcy</a>
+              <a class="pill" href="/comm?with={{ it.seller }}">Zapytaj o LC</a>
             {% endif %}
           {% elif it.status == 'SOLD' %}
             <span class="pill">Kupione przez: {{ it.owner or '—' }}</span>
