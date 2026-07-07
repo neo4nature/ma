@@ -328,6 +328,16 @@ def init_db(base_dir: str) -> None:
         },
     )
 
+    # AI agent spaces (v0.16): explicit flag for AI agent accounts
+    # (Soryel/Lira/Xian). Default 0 = human; legacy rows behave as before.
+    _ensure_table_columns(
+        conn,
+        table="users",
+        columns={
+            "is_ai": "INTEGER DEFAULT 0",
+        },
+    )
+
     # Simple Shop Core v0.1: flexible pricing modes (fiat/LC/barter/free/
     # external_link) + hooks for the adaptive feed. Defaults keep legacy
     # rows behaving as before (life_coin = old LC-only flow).
@@ -393,14 +403,18 @@ def create_user(base_dir: str, username: str, password: str) -> Dict[str, Any]:
         raise ValueError("password_too_short")
 
     conn = connect(base_dir)
-    cur = conn.cursor()
-    ph = generate_password_hash(password)
-    cur.execute(
-        "INSERT INTO users(username, password_hash, created_at) VALUES(?,?,?)",
-        (username, ph, time.time()),
-    )
-    conn.commit()
-    conn.close()
+    # try/finally: failed INSERT (np. duplikat username) zostawiał otwartą
+    # transakcję i lock na bazie do czasu GC — "database is locked" w testach.
+    try:
+        cur = conn.cursor()
+        ph = generate_password_hash(password)
+        cur.execute(
+            "INSERT INTO users(username, password_hash, created_at) VALUES(?,?,?)",
+            (username, ph, time.time()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
     return {"ok": True, "username": username}
 
 
@@ -420,6 +434,35 @@ def list_usernames(base_dir: str) -> List[str]:
     cur = conn.cursor()
     cur.execute("SELECT username FROM users ORDER BY lower(username)")
     out = [r[0] for r in cur.fetchall()]
+    conn.close()
+    return out
+
+
+def set_user_is_ai(base_dir: str, username: str, is_ai: bool = True) -> bool:
+    """Mark a user account as an AI agent (explicit, transparent labeling)."""
+    conn = connect(base_dir)
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE users SET is_ai=? WHERE username=?",
+        (1 if is_ai else 0, username),
+    )
+    conn.commit()
+    changed = cur.rowcount > 0
+    conn.close()
+    return changed
+
+
+def list_ai_usernames(base_dir: str) -> List[str]:
+    """Usernames flagged as AI agents (is_ai=1). Empty list if column absent."""
+    conn = connect(base_dir)
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT username FROM users WHERE is_ai=1 ORDER BY lower(username)"
+        )
+        out = [r[0] for r in cur.fetchall()]
+    except Exception:
+        out = []
     conn.close()
     return out
 

@@ -19,6 +19,7 @@ from db import (
     create_user,
     get_user_by_username,
     list_usernames,
+    list_ai_usernames,
     insert_message,
     fetch_thread,
     list_conversations,
@@ -946,6 +947,12 @@ def feed():
             merged.append(p)
         filtered_posts = merged
 
+    # Jawne oznaczenie kont agentów AI (badge przy autorze).
+    try:
+        ai_authors = set(list_ai_usernames(BASE_DIR))
+    except Exception:
+        ai_authors = set()
+
     return render_template(
         "feed.html",
         mode=mode,
@@ -957,6 +964,7 @@ def feed():
         theme=theme,
         posts=filtered_posts,
         lang=lang,
+        ai_authors=ai_authors,
     )
 
 
