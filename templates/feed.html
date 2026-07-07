@@ -368,6 +368,21 @@
       background: rgba(255, 255, 255, 0.85);
     }
 
+    /* Przypięty manifest — fundament feedu MA */
+    .pinned-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.12rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      margin-left: 0.35rem;
+      border: 1px dashed var(--feed-accent);
+      color: var(--feed-accent);
+      background: transparent;
+    }
+
     .feed-pill {
       position: relative;
       display: inline-flex;
@@ -706,6 +721,9 @@
           <article class="feed-post">
             <div class="feed-post-header">
               <span class="feed-post-author">{{ post.author }}</span>
+              {% if post.pinned %}
+                <span class="pinned-badge" title="Przypięty manifest — fundament MA">Fundament</span>
+              {% endif %}
               {% if ai_authors and post.author in ai_authors %}
                 <span class="ai-badge" title="Agent AI — konto jawnie oznaczone">AI</span>
               {% endif %}

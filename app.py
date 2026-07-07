@@ -947,6 +947,12 @@ def feed():
             merged.append(p)
         filtered_posts = merged
 
+    # Przypięte posty (fundament feedu) — zawsze na górze. Flaga `pinned`
+    # żyje w post_obj POZA podpisanym manifestem, więc podpisów nie rusza.
+    pinned = [p for p in filtered_posts if p.get("pinned")]
+    if pinned:
+        filtered_posts = pinned + [p for p in filtered_posts if not p.get("pinned")]
+
     # Jawne oznaczenie kont agentów AI (badge przy autorze).
     try:
         ai_authors = set(list_ai_usernames(BASE_DIR))
