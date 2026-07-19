@@ -9,6 +9,13 @@ from typing import Dict, Any, Tuple
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 
+from core.system_vault import (
+    save_encrypted_private_key,
+    load_encrypted_priv,
+    vault_path_for,
+    legacy_plaintext_allowed,
+)
+
 
 def _chmod_600(path: Path) -> None:
     try:
@@ -22,30 +29,35 @@ def ensure_horizon_master_keypair(keys_dir: Path) -> Tuple[bytes, bytes]:
     keys_dir.mkdir(parents=True, exist_ok=True)
     priv_path = keys_dir / "horizon_master_ed25519_priv.pem"
     pub_path = keys_dir / "horizon_master_ed25519_pub.pem"
+    vault_path = vault_path_for(priv_path)
 
+    if vault_path.exists() and pub_path.exists():
+        return load_encrypted_priv(vault_path), pub_path.read_bytes()
     if priv_path.exists() and pub_path.exists():
+        if not legacy_plaintext_allowed():
+            raise RuntimeError(
+                "F-02: plaintext horizon master ({}); uruchom migracje".format(priv_path)
+            )
         return priv_path.read_bytes(), pub_path.read_bytes()
 
     priv = ed25519.Ed25519PrivateKey.generate()
-    priv_pem = priv.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
     pub_pem = priv.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-
-    priv_path.write_bytes(priv_pem)
+    save_encrypted_private_key(
+        vault_path,
+        priv,
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        pub_text=pub_pem.decode("utf-8", errors="ignore"),
+    )
     pub_path.write_bytes(pub_pem)
-    _chmod_600(priv_path)
-    return priv_pem, pub_pem
+    return load_encrypted_priv(vault_path), pub_pem
 
 
 def sign_horizon_receipt(tx: Dict[str, Any], keys_dir: Path) -> Dict[str, str]:
     """Sign a minimal Horizon receipt: sha256(canonical_tx_bytes)."""
-    # canonical bytes similar to tx_signer (sort keys, compact)
     import json
     payload = json.dumps(tx, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     tx_hash = hashlib.sha256(payload).hexdigest()

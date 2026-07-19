@@ -25,6 +25,12 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKIP_DIRS = {".git", ".venv", "__pycache__", "tests", ".pytest_cache", "node_modules"}
 
+# F-02: jedyna dozwolona warstwa zapisu priv na dysk to core/system_vault.py.
+# Tam NoEncryption() sluzy tylko serializacji w RAM przed AES-GCM.
+ALLOWED_FILES = {
+    "core/system_vault.py",
+}
+
 # Wzorce sygnalizujące plaintext klucz prywatny.
 PATTERNS = [
     re.compile(r"serialization\.NoEncryption\s*\(\s*\)"),
@@ -48,11 +54,14 @@ def _scan_sources():
                 lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
             except Exception:
                 continue
+            rel = str(p.relative_to(REPO_ROOT))
+            if rel in ALLOWED_FILES:
+                continue
             for i, line in enumerate(lines, 1):
                 for pat in PATTERNS:
                     if pat.search(line):
                         hits.append(
-                            (str(p.relative_to(REPO_ROOT)), i, line.strip())
+                            (rel, i, line.strip())
                         )
                         break
     return hits
@@ -81,10 +90,6 @@ def _scan_runtime_pems():
     return hits
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="F-02: migracja kluczy czeka na decyzję Neo — licznik postępu",
-)
 def test_no_plaintext_key_serialization_in_sources():
     hits = _scan_sources()
     # Zawsze wypisz raport dla operatora.
@@ -95,10 +100,6 @@ def test_no_plaintext_key_serialization_in_sources():
     assert not hits, f"{len(hits)} plaintext key sites found"
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="F-02: migracja kluczy czeka na decyzję Neo — licznik postępu (runtime)",
-)
 def test_no_plaintext_private_pem_in_runtime():
     hits = _scan_runtime_pems()
     report = "\n".join(f"  {p}" for p in hits)

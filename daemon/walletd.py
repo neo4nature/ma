@@ -46,6 +46,12 @@ except Exception:  # pragma: no cover
 
 from core.host_protocol import decode_sign_response  # noqa: F401
 from core.firmware_bridge import _simulated_firmware_handle
+from core.system_vault import (
+    save_encrypted_private_key,
+    load_encrypted_priv,
+    vault_path_for,
+    legacy_plaintext_allowed,
+)
 
 
 def _chmod_600(path: str) -> None:
@@ -58,39 +64,47 @@ def _chmod_600(path: str) -> None:
 def _ensure_device_keypair(keys_dir: str) -> tuple[ed25519.Ed25519PrivateKey, str, str]:
     """Create/load a persistent device Ed25519 keypair.
 
-    Stored under runtime/ by default so walletd ("device") keeps a stable identity
-    across restarts.
+    F-02: priv trzymamy w vault blobie; pub PEM zostaje plaintextem.
     """
+    from pathlib import Path as _P
     os.makedirs(keys_dir, exist_ok=True)
-    priv_path = os.path.join(keys_dir, "device_ed25519_priv.pem")
-    pub_path = os.path.join(keys_dir, "device_ed25519_pub.pem")
+    priv_path = _P(keys_dir) / "device_ed25519_priv.pem"
+    pub_path = _P(keys_dir) / "device_ed25519_pub.pem"
+    vault_path = vault_path_for(priv_path)
 
-    if os.path.exists(priv_path) and os.path.exists(pub_path):
-        priv_pem = open(priv_path, "rb").read()
+    if vault_path.exists() and pub_path.exists():
+        priv_pem = load_encrypted_priv(vault_path)
         priv = serialization.load_pem_private_key(priv_pem, password=None)
-        pub_pem = open(pub_path, "rb").read()
+        pub_pem = pub_path.read_bytes()
         pub_b64 = base64.b64encode(pub_pem).decode("ascii")
-        fp = _fingerprint_from_pub_pem(pub_pem)
-        return priv, pub_b64, fp
+        return priv, pub_b64, _fingerprint_from_pub_pem(pub_pem)
+
+    if priv_path.exists() and pub_path.exists():
+        if not legacy_plaintext_allowed():
+            raise RuntimeError(
+                "F-02: plaintext device key ({}); uruchom migracje".format(priv_path)
+            )
+        priv_pem = priv_path.read_bytes()
+        priv = serialization.load_pem_private_key(priv_pem, password=None)
+        pub_pem = pub_path.read_bytes()
+        pub_b64 = base64.b64encode(pub_pem).decode("ascii")
+        return priv, pub_b64, _fingerprint_from_pub_pem(pub_pem)
 
     priv = ed25519.Ed25519PrivateKey.generate()
-    priv_pem = priv.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
     pub_pem = priv.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-    with open(priv_path, "wb") as f:
-        f.write(priv_pem)
-    with open(pub_path, "wb") as f:
-        f.write(pub_pem)
-    _chmod_600(priv_path)
+    save_encrypted_private_key(
+        vault_path,
+        priv,
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        pub_text=pub_pem.decode("utf-8", errors="ignore"),
+    )
+    pub_path.write_bytes(pub_pem)
     pub_b64 = base64.b64encode(pub_pem).decode("ascii")
-    fp = _fingerprint_from_pub_pem(pub_pem)
-    return priv, pub_b64, fp
+    return priv, pub_b64, _fingerprint_from_pub_pem(pub_pem)
 
 
 def _fingerprint_from_pub_pem(pub_pem: bytes) -> str:
