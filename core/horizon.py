@@ -24,15 +24,50 @@ def _has_sufficient_funds(state: Dict[str, Any] | None, sender: str, amount: flo
     return bal >= amount
 
 
-def evaluate_transaction(tx: Dict[str, Any], state: Dict[str, Any] | None = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def evaluate_transaction(
+    tx: Dict[str, Any],
+    state: Dict[str, Any] | None = None,
+    *,
+    session_user: str | None = None,
+    authorized_by: str | None = None,
+    tx_sig_b64: str | None = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     verdicts = run_all_ai(tx)
 
     has_block = any(v.get("level") == "block" for v in verdicts.values())
     has_warn = any(v.get("level") == "warn" for v in verdicts.values())
 
-    # twarda reguła księgowa: nie pozwól zejść poniżej zera
     sender = (tx.get("sender") or "").strip()
     amount = float(tx.get("amount") or 0.0)
+
+    # F-03: tożsamość nadawcy (fail-closed)
+    if amount > 0 and sender:
+        sess = (session_user or "").strip()
+        auth = (authorized_by or "").strip().lower()
+        if not (sess and sess == sender) and auth != "escrow":
+            decision = {
+                "allowed": False,
+                "status": "BLOCK",
+                "reason": "Horyzont: nadawca transakcji nie odpowiada zalogowanej sesji ani autoryzowanej usłudze systemowej.",
+            }
+            return decision, verdicts
+
+    # F-03: weryfikacja podpisu gdy podany
+    if tx_sig_b64 and sender:
+        try:
+            from wallet.tx_signer import verify_transaction
+            ok = verify_transaction(tx, tx_sig_b64, signer=sender)
+        except Exception:
+            ok = False
+        if not ok:
+            decision = {
+                "allowed": False,
+                "status": "BLOCK",
+                "reason": "Horyzont: podpis transakcji nie odpowiada kluczowi nadawcy.",
+            }
+            return decision, verdicts
+
+    # twarda reguła księgowa: nie pozwól zejść poniżej zera
     if amount > 0 and sender and not _has_sufficient_funds(state, sender, amount):
         decision = {
             "allowed": False,

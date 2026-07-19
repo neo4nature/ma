@@ -2162,7 +2162,7 @@ def api_compute_worker_tick():
         "timestamp": time.time(),
         "meta": {"result_hash_hex": result_hash_hex, "proof_hash_b64": proof_hash_b64},
     }
-    decision, verdicts = evaluate_transaction(tx, load_state())
+    decision, verdicts = evaluate_transaction(tx, load_state(), session_user=me)
 
     outcome_status = "DONE" if result_rel and result_hash_hex else "FAILED"
     complete_compute_job(
@@ -2426,7 +2426,7 @@ def comm_send_money():
         "timestamp": time.time(),
     }
 
-    decision, _verdicts = evaluate_transaction(tx, state)
+    decision, _verdicts = evaluate_transaction(tx, state, session_user=me)
     if not decision.get("allowed"):
         flash("Horyzont: transakcja zablokowana.")
         return redirect(url_for("comm_routes.comm_route", **{"with": peer}))
@@ -2441,6 +2441,11 @@ def comm_send_money():
         tx_sig_b64 = sign_transaction_via_firmware(tx, me, meta=firmware_meta).get('tx_sig_b64')
     else:
         tx_sig_b64 = sign_transaction(tx, me)
+        # F-03: weryfikacja podpisu przed apply (firmware ma własny łańcuch)
+        from wallet.tx_signer import verify_transaction as _verify_tx
+        if not _verify_tx(tx, tx_sig_b64, signer=me):
+            flash("Horyzont: podpis transakcji nie odpowiada kluczowi nadawcy.")
+            return redirect(url_for("comm_routes.comm_route", **{"with": peer}))
 
     horizon_receipt = sign_horizon_receipt(tx, Path(HORIZON_MASTER_KEYS_DIR))
     signature = tx_sig_b64

@@ -59,7 +59,7 @@ def wallet_transfer_internal(
         "timestamp": time.time(),
     }
 
-    decision, verdicts = evaluate_transaction(tx, st)
+    decision, verdicts = evaluate_transaction(tx, st, authorized_by="escrow")
     if not decision.get("allowed"):
         apply_transaction(st, tx, decision, signature=None)
         return {"ok": False, "decision": decision, "verdicts": verdicts, "tx": tx, "tx_sig_b64": None, "horizon_receipt": None}

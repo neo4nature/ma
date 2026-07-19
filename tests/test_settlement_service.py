@@ -63,7 +63,7 @@ def test_wallet_transfer_internal_blocks_disallowed_transaction():
         ensure_account=lambda *a, **k: None,
         ensure_user_wallet_keypair=lambda *a, **k: None,
         wallet_keys_dir="/tmp/keys",
-        evaluate_transaction=lambda tx, st: ({"allowed": False}, {"ai": "blocked"}),
+        evaluate_transaction=lambda tx, st, **kw: ({"allowed": False}, {"ai": "blocked"}),
         apply_transaction=lambda st, tx, decision, signature=None: applied.append((tx, decision, signature)) or st,
         current_user=lambda: "neo",
         signer_mode="SOFTWARE",
