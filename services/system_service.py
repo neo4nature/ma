@@ -7,6 +7,14 @@ runtime behavior.
 from __future__ import annotations
 
 
+def _login_gate():
+    """Match app.require_login: redirect if no session user. Lazy import."""
+    from flask import session, redirect, url_for, request
+    if not session.get("username"):
+        return redirect(url_for("auth.login_route", next=request.path))
+    return None
+
+
 def home_view():
     import app as legacy_app
     return legacy_app.home()
@@ -33,6 +41,9 @@ def api_chain_head_view():
 
 
 def api_chain_events_view():
+    gate = _login_gate()
+    if gate is not None:
+        return gate
     import app as legacy_app
     return legacy_app.api_chain_events()
 

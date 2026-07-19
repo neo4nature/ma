@@ -1451,6 +1451,183 @@ def insert_market_purchase(
     conn.close()
 
 
+def execute_market_purchase(
+    base_dir: str,
+    purchase_id: str,
+    listing_id: str,
+    buyer: str,
+    seller: str,
+    amount: float,
+    currency: str,
+    transfer_fn,
+    transfer_description: str = "MARKET_PURCHASE",
+) -> dict:
+    """Atomic marketplace purchase: reserve -> transfer LC -> mark sold -> record purchase.
+
+    Idempotent by purchase_id (duplicate call returns previously recorded purchase,
+    no side effects). Uses BEGIN IMMEDIATE around the SQLite portion (reserve+sold+
+    insert) so those three DB effects are all-or-nothing. LC transfer runs on its
+    own connection/event-chain (via transfer_fn); on transfer failure we roll back
+    the SQLite reservation. On failure AFTER a successful transfer we compensate
+    with a reverse transfer_fn call. transfer_fn(sender, receiver, amount, description)
+    must return {"ok": bool, "tx_id"?: str, "horizon_receipt_id"?: str, "reason"?: str}.
+
+    Note: _wallet_transfer_internal opens its own SQLite connection and writes to
+    the event chain — it cannot be enclosed in this transaction; hence the
+    compensation strategy for the narrow window between successful transfer and
+    the DB commit that records it.
+
+    Returns {"ok": True, "purchase_id": ..., "tx_id": ..., "idempotent": bool}
+    or {"ok": False, "reason": ...}.
+    """
+    # 1. Idempotence check.
+    conn = connect(base_dir)
+    cur = conn.cursor()
+    cur.execute("SELECT purchase_id, tx_id, horizon_receipt_id FROM market_purchases WHERE purchase_id=?", (purchase_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row is not None:
+        return {
+            "ok": True,
+            "purchase_id": purchase_id,
+            "tx_id": row["tx_id"],
+            "horizon_receipt_id": row["horizon_receipt_id"],
+            "idempotent": True,
+        }
+
+    # 2. Reserve listing in a single immediate transaction. Fail fast if not ACTIVE.
+    conn = connect(base_dir)
+    try:
+        conn.isolation_level = None  # manual transactions
+        cur = conn.cursor()
+        cur.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            "UPDATE market_listings SET status='RESERVED', updated_ts=? "
+            "WHERE listing_id=? AND status='ACTIVE'",
+            (time.time(), listing_id),
+        )
+        if cur.rowcount <= 0:
+            cur.execute("ROLLBACK")
+            conn.close()
+            return {"ok": False, "reason": "listing_not_available"}
+        cur.execute("COMMIT")
+    except Exception as e:
+        try:
+            cur.execute("ROLLBACK")
+        except Exception:
+            pass
+        conn.close()
+        return {"ok": False, "reason": f"reserve_failed:{e}"}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    # 3. Transfer LifeCoin (outside SQLite transaction — has its own connection).
+    try:
+        tx_res = transfer_fn(buyer, seller, float(amount), transfer_description)
+    except Exception as e:
+        tx_res = {"ok": False, "reason": f"transfer_exception:{e}"}
+
+    if not (tx_res and tx_res.get("ok")):
+        # Compensate: release reservation back to ACTIVE.
+        try:
+            conn2 = connect(base_dir)
+            cur2 = conn2.cursor()
+            cur2.execute(
+                "UPDATE market_listings SET status='ACTIVE', updated_ts=? "
+                "WHERE listing_id=? AND status='RESERVED'",
+                (time.time(), listing_id),
+            )
+            conn2.commit()
+            conn2.close()
+        except Exception:
+            pass
+        return {"ok": False, "reason": tx_res.get("reason") if tx_res else "transfer_failed"}
+
+    tx_id = str(tx_res.get("tx_id") or "")
+    horizon_receipt_id = tx_res.get("horizon_receipt_id")
+
+    # 4. Mark sold + insert purchase atomically. If this fails, compensate with a
+    #    reverse transfer so seller doesn't keep funds against no recorded sale.
+    conn = None
+    cur = None
+    try:
+        conn = connect(base_dir)
+        conn.isolation_level = None
+        cur = conn.cursor()
+        cur.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            "UPDATE market_listings SET status='SOLD', owner=?, updated_ts=? "
+            "WHERE listing_id=? AND status='RESERVED'",
+            (buyer, time.time(), listing_id),
+        )
+        if cur.rowcount <= 0:
+            cur.execute("ROLLBACK")
+            raise RuntimeError("mark_sold_failed_listing_state_drift")
+        cur.execute(
+            "INSERT INTO market_purchases(purchase_id, listing_id, buyer, seller, "
+            "amount, currency, tx_id, horizon_receipt_id, ts) VALUES(?,?,?,?,?,?,?,?,?)",
+            (
+                purchase_id,
+                listing_id,
+                buyer,
+                seller,
+                float(amount),
+                currency,
+                tx_id,
+                horizon_receipt_id,
+                time.time(),
+            ),
+        )
+        cur.execute("COMMIT")
+    except Exception as e:
+        try:
+            if cur is not None:
+                cur.execute("ROLLBACK")
+        except Exception:
+            pass
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
+        # Compensate the transfer.
+        try:
+            transfer_fn(seller, buyer, float(amount), f"COMPENSATE:{transfer_description}:{purchase_id}")
+        except Exception:
+            pass
+        # Also try to release the reservation back to ACTIVE.
+        try:
+            conn3 = connect(base_dir)
+            cur3 = conn3.cursor()
+            cur3.execute(
+                "UPDATE market_listings SET status='ACTIVE', updated_ts=? "
+                "WHERE listing_id=? AND status='RESERVED'",
+                (time.time(), listing_id),
+            )
+            conn3.commit()
+            conn3.close()
+        except Exception:
+            pass
+        return {"ok": False, "reason": f"record_failed:{e}"}
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
+
+    return {
+        "ok": True,
+        "purchase_id": purchase_id,
+        "tx_id": tx_id,
+        "horizon_receipt_id": horizon_receipt_id,
+        "idempotent": False,
+    }
+
+
 def list_market_purchases_for_user(base_dir: str, username: str, limit: int = 200) -> list[dict]:
     conn = connect(base_dir)
     cur = conn.cursor()

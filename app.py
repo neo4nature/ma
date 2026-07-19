@@ -573,6 +573,30 @@ def register():
     return render_template("register.html", me=current_user())
 
 
+def _safe_next(nxt: str | None, default: str = "/comm") -> str:
+    """F-04: dopuść tylko względne, same-origin ścieżki.
+
+    Odrzuca URL-e absolutne (ze schematem lub `//`) oraz warianty z
+    backslashem (`/\\evil`) — przeglądarki normalizują `\\` do `/`, więc
+    `/\\evil.tld` staje się efektywnie `//evil.tld`.
+    """
+    if not nxt or not isinstance(nxt, str):
+        return default
+    # backslash w dowolnym miejscu prefixu jest podejrzany po normalizacji
+    if "\\" in nxt:
+        return default
+    # musi zaczynać się od "/" i NIE od "//"
+    if not nxt.startswith("/"):
+        return default
+    if nxt.startswith("//"):
+        return default
+    # zapobieganie schema-relative i URL-om absolutnym (":" przed pierwszym "/")
+    # ścieżka relatywna nie powinna zawierać schematu
+    if "://" in nxt:
+        return default
+    return nxt
+
+
 def login():
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
@@ -606,7 +630,7 @@ def login():
 
         session["username"] = username
         ensure_wallet_secret(username, password)
-        nxt = request.args.get("next") or "/comm"
+        nxt = _safe_next(request.args.get("next"), default="/comm")
         return redirect(nxt)
     return render_template("login.html", me=current_user())
 
@@ -671,6 +695,16 @@ def fid_login_wallet():
     Request JSON: {"username": "Neo"}
     Response JSON: {ok, username}
     """
+    # F-01: w trybie SOFTWARE serwer trzymałby klucz usera i sam podpisał
+    # wyzwanie — to bypass uwierzytelniania. Wallet-login jest dozwolony
+    # tylko gdy podpis pochodzi z zewnętrznego urządzenia (FIRMWARE);
+    # klient/urządzenie musi użyć flow /fid/challenge + /fid/verify.
+    if SIGNER_MODE != 'FIRMWARE':
+        return jsonify({
+            "ok": False,
+            "error": "wallet_login_requires_firmware",
+            "hint": "use /fid/challenge + /fid/verify with a client-side signature",
+        }), 403
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     if not username:
