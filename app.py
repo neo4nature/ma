@@ -8,8 +8,10 @@ import uuid
 import base64
 import hashlib
 import io
+import sqlite3
 from pathlib import Path
 from PIL import Image
+from cryptography.hazmat.primitives.asymmetric import x25519
 
 from core.paths import data_dir as _data_dir, secrets_dir as _secrets_dir
 from core.safe_fs import safe_mkdirs, safe_resolve_file, tighten_dir_perms, UnsafePath
@@ -21,6 +23,7 @@ from db import (
     list_usernames,
     list_ai_usernames,
     insert_message,
+    get_message,
     fetch_thread,
     list_conversations,
     mark_thread_read,
@@ -63,6 +66,10 @@ from db import (
     get_pricing_state,
     set_pricing_state,
     count_compute_jobs_by_status,
+    get_comm_device,
+    get_active_comm_device_for_owner,
+    insert_comm_device_with_pairing_code,
+    revoke_comm_device,
 )
 from werkzeug.security import check_password_hash
 
@@ -86,6 +93,19 @@ from core.storage_assemble import (
     iter_assembled_bytes,
 )
 from core.comm_crypto import ensure_comm_keypair, encrypt_for_pair, decrypt_for_pair, _b64e, _b64d
+from core.mobile_comm import (
+    ACTION_SEND,
+    ALG,
+    ENVELOPE_VERSION,
+    MAX_CLOCK_SKEW_MS,
+    MobileCommError,
+    canonical_envelope_bytes,
+    expected_aad,
+    pair_device,
+    response_for_device,
+    verify_ready_envelope,
+    message_matches_verified,
+)
 from core.horizon_messages import evaluate_message
 from core.horizon_signer import sign_horizon_receipt
 from wallet.user_keys import ensure_user_wallet_keypair, rotate_user_keypair
@@ -492,7 +512,9 @@ def ensure_wallet_secret(user: str, password: str) -> None:
 
 
 def _bootstrap_default_users():
-    """Create demo users in DB on first run (local prototype)."""
+    """Explicit opt-in compatibility bootstrap for isolated development."""
+    if os.getenv("MA_BOOTSTRAP_DEMO_USERS", "0") != "1":
+        return
     existing = list_usernames(BASE_DIR)
     if existing:
         return
@@ -2506,12 +2528,18 @@ def comm_api_send():
 
     # crypto: X25519 -> shared -> HKDF -> AES-GCM
     sender_kp = ensure_comm_keypair(sender, Path(COMM_KEYS_DIR))
-    receiver_kp = ensure_comm_keypair(receiver, Path(COMM_KEYS_DIR))
+    receiver_device = get_active_comm_device_for_owner(BASE_DIR, receiver)
+    if receiver_device:
+        receiver_pub = x25519.X25519PublicKey.from_public_bytes(
+            _b64d(receiver_device["x25519_public_b64"])
+        )
+    else:
+        receiver_pub = ensure_comm_keypair(receiver, Path(COMM_KEYS_DIR)).public_key
 
     msg_id = str(uuid.uuid4())
     ts = time.time()
     aad = f"{sender}->{receiver}|{msg_id}|{ts}".encode("utf-8")
-    ct, nonce, salt = encrypt_for_pair(sender_kp.private_key, receiver_kp.public_key, text.encode("utf-8"), aad)
+    ct, nonce, salt = encrypt_for_pair(sender_kp.private_key, receiver_pub, text.encode("utf-8"), aad)
 
     insert_message(
         BASE_DIR,
@@ -2525,11 +2553,148 @@ def comm_api_send():
             "salt_b64": _b64e(salt),
             "aad_b64": _b64e(aad),
             "v": 1,
+            "receiver_device_id": receiver_device["device_id"] if receiver_device else None,
         },
     )
 
     # return last 50 decrypted for UI convenience
     return comm_api_thread(f"{sender}__{receiver}")
+
+
+def _mobile_comm_error(exc: MobileCommError):
+    return jsonify({"ok": False, "error": exc.code}), exc.status
+
+
+def comm_device_pair():
+    """Pair one external device with a real MA user.
+
+    The operator chooses the owner through ``MA_DEVICE_PAIR_OWNER`` and starts
+    MA with a one-time ``MA_DEVICE_PAIR_CODE``.  The request cannot choose its
+    own owner, so a phone cannot promote itself to Neo or Lira.
+    """
+    data = request.get_json(silent=True) or {}
+    owner = os.getenv("MA_DEVICE_PAIR_OWNER", "Natalia").strip()
+    pair_code = os.getenv("MA_DEVICE_PAIR_CODE", "")
+    try:
+        record = pair_device(
+            data,
+            owner_username=owner,
+            expected_pair_code=pair_code,
+            user_exists=lambda username: get_user_by_username(BASE_DIR, username) is not None,
+            get_device=lambda device_id: get_comm_device(BASE_DIR, device_id),
+            store_new_device=lambda item, digest, username: insert_comm_device_with_pairing_code(
+                BASE_DIR, item, digest, username
+            ),
+        )
+    except MobileCommError as exc:
+        return _mobile_comm_error(exc)
+
+    # The first authenticated response gives the phone the public COMM keys it
+    # needs to encrypt to MA participants.  Public keys are not secrets; the
+    # private halves remain in the server vault.
+    recipient_keys = {}
+    for username in list_usernames(BASE_DIR):
+        if username == owner:
+            continue
+        recipient_keys[username] = ensure_comm_keypair(
+            username, Path(COMM_KEYS_DIR)
+        ).public_b64
+    response = response_for_device(record)
+    response["recipient_x25519_keys"] = recipient_keys
+    return jsonify(response), (200 if response["idempotent_replay"] else 201)
+
+
+def comm_api_ready_envelope():
+    """Accept a ciphertext already produced by an authenticated MA device."""
+    env = request.get_json(silent=True) or {}
+    # An exact, already-stored retry remains idempotent even after the normal
+    # five-minute freshness window.  Signature/revocation/AAD checks still run.
+    existing = get_message(BASE_DIR, str(env.get("message_id") or ""))
+    try:
+        verified = verify_ready_envelope(
+            env,
+            get_device=lambda device_id: get_comm_device(BASE_DIR, device_id),
+            receiver_exists=lambda username: get_user_by_username(BASE_DIR, username) is not None,
+            allow_stale=existing is not None,
+        )
+    except MobileCommError as exc:
+        return _mobile_comm_error(exc)
+
+    if existing:
+        if not message_matches_verified(existing, verified):
+            return jsonify({"ok": False, "error": "message_id_reused_with_different_envelope"}), 409
+        return jsonify({
+            "ok": True,
+            "message_id": env["message_id"],
+            "sender": verified.device["owner_username"],
+            "receiver": env["receiver"],
+            "idempotent_replay": True,
+        })
+
+    # Opening the envelope before storage proves that Android and MA agree on
+    # raw X25519 bytes, HKDF, nonce/tag layout and AAD.  It also lets the
+    # existing Horizon policy see the same plaintext as the legacy web route.
+    try:
+        sender_pub = x25519.X25519PublicKey.from_public_bytes(
+            _b64d(verified.device["x25519_public_b64"])
+        )
+        receiver_kp = ensure_comm_keypair(env["receiver"], Path(COMM_KEYS_DIR))
+        plaintext = decrypt_for_pair(
+            receiver_kp.private_key,
+            sender_pub,
+            verified.ciphertext,
+            verified.nonce,
+            verified.salt,
+            verified.aad,
+        ).decode("utf-8", errors="strict")
+    except Exception:
+        return jsonify({"ok": False, "error": "undecryptable_envelope"}), 400
+    if not plaintext.strip() or len(plaintext.encode("utf-8")) > 4000:
+        return jsonify({"ok": False, "error": "invalid_plaintext_size"}), 400
+
+    sender = verified.device["owner_username"]
+    rate = load_comm_rate()
+    decision, rate = evaluate_message(sender, env["receiver"], plaintext, rate)
+    save_comm_rate(rate)
+    if decision.status != "ALLOWED":
+        return jsonify({"ok": False, "error": decision.reason, "meta": decision.meta}), 400
+
+    try:
+        insert_message(
+            BASE_DIR,
+            {
+                "id": env["message_id"],
+                "sender": sender,
+                "receiver": env["receiver"],
+                "timestamp": int(env["timestamp_ms"]) / 1000.0,
+                "ciphertext_b64": env["ciphertext_b64"],
+                "nonce_b64": env["nonce_b64"],
+                "salt_b64": env["salt_b64"],
+                "aad_b64": env["aad_b64"],
+                "v": int(env["v"]),
+                "sender_device_id": env["device_id"],
+            },
+        )
+    except sqlite3.IntegrityError:
+        # A concurrent retry may win between the lookup and INSERT.
+        existing = get_message(BASE_DIR, env["message_id"])
+        if not existing or not message_matches_verified(existing, verified):
+            return jsonify({"ok": False, "error": "message_id_reused_with_different_envelope"}), 409
+        return jsonify({
+            "ok": True,
+            "message_id": env["message_id"],
+            "sender": sender,
+            "receiver": env["receiver"],
+            "idempotent_replay": True,
+        })
+
+    return jsonify({
+        "ok": True,
+        "message_id": env["message_id"],
+        "sender": sender,
+        "receiver": env["receiver"],
+        "idempotent_replay": False,
+    }), 201
 
 
 @require_login
@@ -2542,14 +2707,15 @@ def comm_api_thread(key):
         a, b = (current_user() or 'Neo'), 'Lira'
     a = (a or (current_user() or 'Neo')).strip(); b = (b or 'Lira').strip()
 
-    ensure_user_records([a, b])
+    # External participants keep the X25519 private key on their device.  Do
+    # not mistake a server-generated key with the same display name for that
+    # device key.
+    for participant in (a, b):
+        if not get_active_comm_device_for_owner(BASE_DIR, participant):
+            ensure_user_records([participant])
 
     k = '::'.join(sorted([a, b], key=str.lower))
     thread = fetch_thread(BASE_DIR, a, b, limit=50)
-
-    # decrypt only for the pair (local prototype)
-    a_kp = ensure_comm_keypair(a, Path(COMM_KEYS_DIR))
-    b_kp = ensure_comm_keypair(b, Path(COMM_KEYS_DIR))
 
     out = []
     for m in thread:
@@ -2566,10 +2732,38 @@ def comm_api_thread(key):
                 sender = m.get("sender")
                 receiver = m.get("receiver")
 
-                if sender == a and receiver == b:
-                    body = decrypt_for_pair(b_kp.private_key, a_kp.public_key, ct, nonce, salt, aad).decode("utf-8", errors="replace")
-                elif sender == b and receiver == a:
-                    body = decrypt_for_pair(a_kp.private_key, b_kp.public_key, ct, nonce, salt, aad).decode("utf-8", errors="replace")
+                sender_device_id = m.get("sender_device_id")
+                receiver_device_id = m.get("receiver_device_id")
+                if sender_device_id:
+                    device = get_comm_device(BASE_DIR, sender_device_id)
+                    if not device:
+                        raise ValueError("sender_device_missing")
+                    device_pub = x25519.X25519PublicKey.from_public_bytes(
+                        _b64d(device["x25519_public_b64"])
+                    )
+                    receiver_kp = ensure_comm_keypair(receiver, Path(COMM_KEYS_DIR))
+                    body = decrypt_for_pair(
+                        receiver_kp.private_key, device_pub, ct, nonce, salt, aad
+                    ).decode("utf-8", errors="replace")
+                elif receiver_device_id:
+                    device = get_comm_device(BASE_DIR, receiver_device_id)
+                    if not device:
+                        raise ValueError("receiver_device_missing")
+                    device_pub = x25519.X25519PublicKey.from_public_bytes(
+                        _b64d(device["x25519_public_b64"])
+                    )
+                    sender_kp = ensure_comm_keypair(sender, Path(COMM_KEYS_DIR))
+                    # X25519 is symmetric: the server sender's private key and
+                    # the phone receiver's public key derive the same secret.
+                    body = decrypt_for_pair(
+                        sender_kp.private_key, device_pub, ct, nonce, salt, aad
+                    ).decode("utf-8", errors="replace")
+                elif {sender, receiver} == {a, b}:
+                    sender_kp = ensure_comm_keypair(sender, Path(COMM_KEYS_DIR))
+                    receiver_kp = ensure_comm_keypair(receiver, Path(COMM_KEYS_DIR))
+                    body = decrypt_for_pair(
+                        receiver_kp.private_key, sender_kp.public_key, ct, nonce, salt, aad
+                    ).decode("utf-8", errors="replace")
                 else:
                     body = "[encrypted]"
             except Exception:

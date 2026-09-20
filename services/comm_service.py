@@ -24,3 +24,13 @@ def comm_send_view():
 def comm_thread_view(key):
     import app as legacy_app
     return legacy_app.comm_api_thread(key)
+
+
+def comm_device_pair_view():
+    import app as legacy_app
+    return legacy_app.comm_device_pair()
+
+
+def comm_ready_envelope_view():
+    import app as legacy_app
+    return legacy_app.comm_api_ready_envelope()
