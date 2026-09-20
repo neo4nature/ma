@@ -55,6 +55,31 @@ def init_db(base_dir: str) -> None:
           v INTEGER DEFAULT 1
         );
 
+        /* External MA clients are users with one or more independently
+           revocable devices.  Signing authenticates the device; X25519 is a
+           separate key used only for COMM envelope encryption. */
+        CREATE TABLE IF NOT EXISTS comm_devices (
+          device_id TEXT PRIMARY KEY,
+          owner_username TEXT NOT NULL,
+          signing_pub_der_b64 TEXT NOT NULL,
+          signing_fingerprint TEXT NOT NULL,
+          signing_key_id TEXT NOT NULL,
+          x25519_public_b64 TEXT NOT NULL,
+          x25519_fingerprint TEXT NOT NULL,
+          created_ts REAL NOT NULL,
+          revoked_ts REAL,
+          FOREIGN KEY(owner_username) REFERENCES users(username)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_comm_devices_owner
+          ON comm_devices(owner_username, revoked_ts, created_ts);
+
+        CREATE TABLE IF NOT EXISTS comm_pairing_codes (
+          code_hash TEXT PRIMARY KEY,
+          owner_username TEXT NOT NULL,
+          consumed_ts REAL NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS user_secrets (
           user_id INTEGER NOT NULL,
           key_type TEXT NOT NULL,
@@ -325,6 +350,10 @@ def init_db(base_dir: str) -> None:
         table="messages",
         columns={
             "thread_ref": "TEXT",
+            # Device ids pin an envelope to the exact external X25519 key.
+            # NULL keeps every legacy MA65 row unchanged.
+            "sender_device_id": "TEXT",
+            "receiver_device_id": "TEXT",
         },
     )
 
@@ -371,8 +400,9 @@ def init_db(base_dir: str) -> None:
     # bootstrap demo users if DB is empty
     cur.execute("SELECT COUNT(*) AS n FROM users")
     n = int(cur.fetchone()["n"])
-    if n == 0:
-        # local prototype defaults
+    if n == 0 and os.getenv("MA_BOOTSTRAP_DEMO_USERS", "0") == "1":
+        # Explicit development-only compatibility mode.  Never create known
+        # passwords merely because a production database is empty.
         create_user(base_dir, "Neo", "demo")
         create_user(base_dir, "Lira", "demo")
     conn.close()
@@ -477,8 +507,12 @@ def insert_message(base_dir: str, m: Dict[str, Any]) -> None:
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO messages(msg_id, sender, receiver, ts, ciphertext_b64, nonce_b64, salt_b64, aad_b64, receiver_read, v, thread_ref)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO messages(
+          msg_id, sender, receiver, ts, ciphertext_b64, nonce_b64,
+          salt_b64, aad_b64, receiver_read, v, thread_ref,
+          sender_device_id, receiver_device_id
+        )
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             m.get("id"),
@@ -492,10 +526,106 @@ def insert_message(base_dir: str, m: Dict[str, Any]) -> None:
             int(m.get("receiver_read") or 0),
             int(m.get("v") or 1),
             m.get("thread_ref"),
+            m.get("sender_device_id"),
+            m.get("receiver_device_id"),
         ),
     )
     conn.commit()
     conn.close()
+
+
+def get_message(base_dir: str, msg_id: str) -> Optional[Dict[str, Any]]:
+    conn = connect(base_dir)
+    try:
+        row = conn.execute("SELECT * FROM messages WHERE msg_id=?", (msg_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_comm_device(base_dir: str, device_id: str) -> Optional[Dict[str, Any]]:
+    conn = connect(base_dir)
+    try:
+        row = conn.execute(
+            "SELECT * FROM comm_devices WHERE device_id=?", (device_id,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_active_comm_device_for_owner(base_dir: str, owner_username: str) -> Optional[Dict[str, Any]]:
+    """Newest non-revoked external device for a COMM recipient.
+
+    The first Android POC has one phone.  Keeping the device id on every
+    message makes adding fan-out to multiple devices possible without changing
+    old ciphertext rows later.
+    """
+    conn = connect(base_dir)
+    try:
+        row = conn.execute(
+            """SELECT * FROM comm_devices
+               WHERE owner_username=? AND revoked_ts IS NULL
+               ORDER BY created_ts DESC LIMIT 1""",
+            (owner_username,),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def insert_comm_device_with_pairing_code(
+    base_dir: str,
+    record: Dict[str, Any],
+    code_hash: str,
+    owner_username: str,
+) -> bool:
+    """Atomically consume the one-time code and insert its device."""
+    conn = connect(base_dir)
+    try:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO comm_pairing_codes(code_hash, owner_username, consumed_ts) VALUES(?,?,?)",
+                (code_hash, owner_username, time.time()),
+            )
+            conn.execute(
+                """INSERT INTO comm_devices(
+                     device_id, owner_username, signing_pub_der_b64,
+                     signing_fingerprint, signing_key_id, x25519_public_b64,
+                     x25519_fingerprint, created_ts, revoked_ts
+                   ) VALUES(?,?,?,?,?,?,?,?,NULL)""",
+                (
+                    record["device_id"],
+                    record["owner_username"],
+                    record["signing_pub_der_b64"],
+                    record["signing_fingerprint"],
+                    record["signing_key_id"],
+                    record["x25519_public_b64"],
+                    record["x25519_fingerprint"],
+                    float(record.get("created_ts") or time.time()),
+                ),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            return False
+    finally:
+        conn.close()
+
+
+def revoke_comm_device(base_dir: str, device_id: str) -> bool:
+    conn = connect(base_dir)
+    try:
+        cur = conn.execute(
+            "UPDATE comm_devices SET revoked_ts=? WHERE device_id=? AND revoked_ts IS NULL",
+            (time.time(), device_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
 
 
 def fetch_thread(base_dir: str, a: str, b: str, limit: int = 50, thread_ref: Optional[str] = None) -> List[Dict[str, Any]]:
